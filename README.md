@@ -9,6 +9,16 @@ DeepSeek 账户余额。
   通过 DSH 的 `locale` 服务提供中英文双语（`settings.billing` 命名空间），导航、正常 / 加载 / 错误文案和时间格式
   均随「设置 → 语言」实时切换
 
+## 界面预览
+
+### 中文
+
+![DeepSeek 计费插件中文界面](docs/image_zh.png)
+
+### English
+
+![DeepSeek billing plugin English interface](docs/image_en.png)
+
 ## 安装
 
 ```bash
