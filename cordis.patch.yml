@@ -1,0 +1,9 @@
+# dsh-deepseek-billing bundle patch.
+#
+# Inserts this dual-face package by its own name. The host half provides the
+# `deepseekBilling` service plus the /api/deepseek-billing/balance route; the
+# client half is discovered from the `dsh.client` declaration and scanned into
+# window.__DSH_BOOT__ by clientModules.
+- insert:
+    - id: deepseek-billing
+      name: 'dsh-deepseek-billing'

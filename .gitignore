@@ -1,0 +1,32 @@
+# dependencies
+node_modules/
+
+# env & secrets（凭证库、环境变量 —— 绝不能提交）
+.env
+.env.*
+!.env.example
+.credentials.yaml
+credentials.yaml
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# editor / IDE
+.vscode/
+.idea/
+*.swp
+
+# build / cache
+dist/
+build/
+*.tsbuildinfo
+.eslintcache
+.cache/
