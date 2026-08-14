@@ -21,6 +21,7 @@
       "platform": "web",
       "inject": [
         "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-ui-settings-general"
       ]
     }
@@ -29,6 +30,7 @@
     "react": "^18.2.0",
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-locale": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-client-ui-settings-general": "^0.1.0-rc.6"
   },
   "license": "MIT"

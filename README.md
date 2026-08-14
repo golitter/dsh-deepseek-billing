@@ -5,7 +5,9 @@ DeepSeek 账户余额。
 
 - **宿主半**：提供 `deepseekBilling` 服务（真实余额 fetch）＋ JSON 路由
   `GET /api/deepseek-billing/balance`
-- **客户端半**：在设置页注册「计费」区块，展示可用 / 充值 / 赠送余额，支持手动刷新
+- **客户端半**：在设置页注册「计费」区块，展示可用 / 充值 / 赠送余额，支持手动刷新；
+  通过 DSH 的 `locale` 服务提供中英文双语（`settings.billing` 命名空间），导航、正常 / 加载 / 错误文案和时间格式
+  均随「设置 → 语言」实时切换
 
 ## 安装
 
@@ -43,10 +45,22 @@ DEEPSEEK_API_KEY: sk-xxxxxxxxxxxxxxxx
     └── client.js       # 客户端半：设置页 UI（window.__ModuleLoader__.load）
 ```
 
+## 国际化
+
+- 客户端接入 DSH 的 `locale` 服务（`inject: ['slots', 'locale']`），注册自己的
+  `settings.billing` 命名空间词典：`zh` 为键集来源，`en` 与之一一对应。
+- 所有界面文案经 `const t = ctx.locale.bind('settings.billing')` 翻译；侧边栏 label
+  使用 thunk `label: () => t('nav')`，余额页通过 `ctx.locale.subscribe()` +
+  `React.useSyncExternalStore` 订阅语言快照——切换中英文后页面即时重渲染，无需刷新。
+- 服务端只返回稳定错误码（`missing_credential` / `balance_timeout` /
+  `balance_fetch_failed` / `billing_service_unavailable` / `invalid_response`），
+  客户端再按当前语言翻译，避免英文界面出现中文报错。
+
 ## 开发
 
 - 改客户端 UI → 改 `lib/client.js`，重启 web 生效（客户端 bundle 无 HMR）。
 - 改路由 / 服务 → 改 `lib/index.js`。
 - 依赖的服务（`credentials`、`webServer`）和客户端注入包
-  （`@deepseek-ai/dsh-client-runtime`、`@deepseek-ai/dsh-client-ui-settings-general`）
+  （`@deepseek-ai/dsh-client-runtime`、`@deepseek-ai/dsh-client-locale`、
+  `@deepseek-ai/dsh-client-ui-settings-general`）
   都是 DSH 部署自带的，通过 `peerDependencies` 声明即可，无需随包分发。
