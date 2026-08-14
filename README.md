@@ -10,11 +10,7 @@ DeepSeek 账户余额。
 ## 安装
 
 ```bash
-# npm
-dsh plugin --profile web install dsh-deepseek-billing
-
-# 或 git
-dsh plugin --profile web install github:<you>/dsh-deepseek-billing
+dsh plugin --profile web install github:golitter/dsh-deepseek-billing
 ```
 
 安装后，包会因声明了 `dsh.bundle` 自动写入 profile 的 `dsh.profile.bundles`，
