@@ -3,6 +3,18 @@ import test from 'node:test'
 
 test('client injects required services and keeps locale keys identical', async () => {
   const previousWindow = globalThis.window
+  const previousSetTimeout = globalThis.setTimeout
+  const previousClearTimeout = globalThis.clearTimeout
+  const timers = new Map()
+  let nextTimerId = 1
+  globalThis.setTimeout = (callback, delay) => {
+    const id = nextTimerId++
+    timers.set(id, { callback, delay })
+    return id
+  }
+  globalThis.clearTimeout = (id) => {
+    timers.delete(id)
+  }
   let definition
   globalThis.window = {
     __ModuleLoader__: {
@@ -28,7 +40,9 @@ test('client injects required services and keeps locale keys identical', async (
     let commandExecuted
     const notices = []
     const listListeners = new Set()
+    const sessionListeners = new Set()
     let currentSession = 'session-1'
+    let sessionPhase = 'blank'
     let currentNotice = null
     const noticeStore = {
       getSnapshot() {
@@ -94,10 +108,25 @@ test('client injects required services and keeps locale keys identical', async (
         },
         binding(sessionId) {
           if (sessionId === 'session-1') {
-            return { session: { getSnapshot: () => ({ composerPhase: 'blank' }) } }
+            return {
+              session: {
+                getSnapshot: () => ({ composerPhase: sessionPhase }),
+                subscribe(listener) {
+                  sessionListeners.add(listener)
+                  return () => sessionListeners.delete(listener)
+                },
+              },
+            }
           }
           if (sessionId === 'session-2') {
-            return { session: { getSnapshot: () => ({ composerPhase: 'active' }) } }
+            return {
+              session: {
+                getSnapshot: () => ({ composerPhase: 'active' }),
+                subscribe() {
+                  return () => {}
+                },
+              },
+            }
           }
           return undefined
         },
@@ -135,10 +164,29 @@ test('client injects required services and keeps locale keys identical', async (
       { level: 'error', text: '未配置 DeepSeek API 密钥' },
     ])
     assert.equal(currentNotice?.text, '未配置 DeepSeek API 密钥')
+    assert.equal(timers.size, 1)
+
+    const [expiryId, expiry] = timers.entries().next().value
+    assert.equal(expiry.delay, 60_000)
+    timers.delete(expiryId)
+    expiry.callback()
+    assert.equal(currentNotice, null)
+
+    commandExecuted('session-1', 'deepseek-billing', { kind: 'success', text: 'balance before activation' })
+    assert.equal(currentNotice?.text, 'balance before activation')
+    sessionPhase = 'active'
+    for (const listener of sessionListeners) listener()
+    assert.equal(currentNotice, null)
+    assert.equal(timers.size, 0)
+
+    sessionPhase = 'blank'
+    commandExecuted('session-1', 'deepseek-billing', { kind: 'success', text: 'balance before navigation' })
+    assert.equal(currentNotice?.text, 'balance before navigation')
 
     currentSession = 'session-2'
     for (const listener of listListeners) listener()
     assert.equal(currentNotice, null)
+    assert.equal(timers.size, 0)
 
     // A result that arrives after navigation must not be retained on the
     // reusable blank session and reappear when New Session is opened again.
@@ -148,6 +196,8 @@ test('client injects required services and keeps locale keys identical', async (
     for (const listener of listListeners) listener()
     assert.equal(currentNotice, null)
   } finally {
+    globalThis.setTimeout = previousSetTimeout
+    globalThis.clearTimeout = previousClearTimeout
     if (previousWindow === undefined) delete globalThis.window
     else globalThis.window = previousWindow
   }
