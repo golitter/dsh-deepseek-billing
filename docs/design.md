@@ -9,7 +9,7 @@
 - **宿主半（host half）**：读取 DeepSeek `/user/balance` 接口，以服务 `deepseekBilling` 暴露给宿主，并通过本地 HTTP 路由把结果给浏览器。
 - **客户端半（client half）**：在「设置 → 计费 / Billing」区块渲染余额，接入 DSH 的 `locale` 服务，界面随中英文实时切换。
 
-两个半共用同一个 npm 包：宿主端通过 bundle patch 注入，客户端端通过 `dsh.client` 声明被 `clientModules` 服务扫描进浏览器。
+两个半共用同一个 npm 包：宿主端通过 bundle patch 注入，客户端通过 `dsh.client` 声明被 `clientModules` 服务扫描进浏览器。
 
 ## 2. 设计目标与非目标
 
@@ -47,7 +47,7 @@ flowchart LR
 
 数据流分两条：
 
-1. **余额链路（请求/响应）**：客户端 `fetch` 本地路由 → 路由调用 `deepseekBilling.getBalance()` → 服务从 `credentials` 解析 `DEEPSEEK_API_KEY` → 携带 `Authorization: Bearer` 请求 DeepSeek `/user/balance` → 结果原路返回，客户端渲染。
+1. **余额链路（请求/响应）**：客户端 `fetch` 本地路由 → 路由调用 `deepseekBilling.getBalance()` → 服务从 `credentials` 解析 `DEEPSEEK_API_KEY` → 携带 `Authorization: Bearer` 请求 DeepSeek `/user/balance` → 校验并白名单化首条余额 → 客户端渲染。
 2. **语言链路（单向）**：DSH `locale` 服务只影响客户端 UI（文案 + 时间格式），不参与服务端与上游交互。
 
 ## 4. 打包与分发模型
@@ -107,17 +107,17 @@ const DEFAULT_TIMEOUT_MS = 10_000
 
 | 错误码 | 触发条件 | 中文文案 | English |
 |---|---|---|---|
-| `missing_credential` | 凭证库没有 `DEEPSEEK_API_KEY` 或为空 | 未配置 DeepSeek API 密钥 | DeepSeek API key is not configured |
+| `missing_credential` | 凭证值缺失、不是字符串或 `trim()` 后为空 | 未配置 DeepSeek API 密钥 | DeepSeek API key is not configured |
 | `balance_timeout` | 上游请求超过 `timeoutMs`（`AbortError`） | 获取余额超时 | Balance request timed out |
 | `balance_fetch_failed` | `fetch` 网络层失败（非超时） | 获取余额失败 | Failed to fetch balance |
-| `billing_service_unavailable` | 上游返回非 2xx | 计费服务暂不可用 | Billing service is temporarily unavailable |
+| `billing_service_unavailable` | 上游返回非 2xx、请求方法不是 GET，或路由捕获没有字符串 `.code` 的异常 | 计费服务暂不可用 | Billing service is temporarily unavailable |
 | `invalid_response` | 上游返回非法 JSON / 非法 payload / 非法余额条目 | 余额接口返回异常数据 | Balance endpoint returned unexpected data |
 
 ### 5.2 服务 `deepseekBilling`
 
 `getBalance()` 是唯一对外能力，流程：
 
-1. `await ctx.credentials.resolve(CREDENTIAL_REF)` 取密钥；缺失/空 → `missing_credential`。
+1. `await ctx.credentials.resolve(CREDENTIAL_REF)` 取密钥并 `trim()`；缺失、非字符串或全空白 → `missing_credential`。
 2. 新建 `AbortController`，`setTimeout` 到 `timeoutMs` 后 `abort()`。
 3. `fetch(endpoint, { authorization: Bearer ..., signal })`：
    - 捕获 `AbortError` → `balance_timeout`；
@@ -156,7 +156,7 @@ DeepSeek 返回（客户端实际用到的字段）：
 | 非 GET | `405` | `{ "ok": false, "code": "billing_service_unavailable" }` + `Allow: GET` |
 | 任何 `getBalance()` 失败 | `502` | `{ "ok": false, "code": "<稳定错误码>" }` |
 
-统一响应头 `Cache-Control: no-store`（余额是敏感、易变数据）。余额查询失败及协议层 `405` 都返回稳定的 `code` 结构，未知异常兜底为 `billing_service_unavailable`。堆栈、内部路径、上游正文只进服务端 `console.error`，绝不进响应体。
+统一响应头 `Cache-Control: no-store`（余额是敏感、易变数据）。余额查询失败及协议层 `405` 都返回 `{ ok: false, code }` 结构。没有字符串 `.code` 的异常兜底为 `billing_service_unavailable`；例如 `ctx.credentials.resolve()` 直接抛出的普通 `Error` 会被规范化为该码。当前路由会透传异常自带的字符串 `.code`，其边界见“已知限制与后续”。堆栈、内部路径、上游正文只进服务端 `console.error`，绝不进响应体。
 
 ## 6. 客户端设计（lib/client.js）
 
@@ -304,6 +304,7 @@ const updatedTime = state.updatedAt
 ## 9. 安全与隐私
 
 - 密钥只经 `ctx.credentials.resolve('DEEPSEEK_API_KEY')` 读取；DSH 凭证库负责持久化，插件自身不另行保存，也不写进代码、日志、响应、文档、截图或测试数据。
+- 凭据会被发送到 `config.endpoint`；默认值是 DeepSeek 官方 HTTPS 地址。该配置属于受信任的宿主配置，不接受浏览器请求参数覆盖，修改时必须同时评估代理需求与凭据泄露风险。
 - `Cache-Control: no-store` 阻止浏览器缓存余额。
 - 错误响应不含堆栈、内部路径、上游正文。
 - 路由仅提供 `GET` 只读操作，不接受用户输入作为上游地址或请求头。
@@ -322,15 +323,22 @@ node -e "JSON.parse(require('fs').readFileSync('package.json'))"
 
 ```bash
 npm test
+# 或直接运行底层命令
+node --test
 ```
 
-测试使用 Node.js 内置 `node:test`，不依赖真实 DSH 或 DeepSeek 服务：宿主端覆盖凭据、超时、网络/HTTP 错误、响应校验、字段白名单、路由和配置边界；客户端通过模块工厂验证模块 ID、服务注入、词典命名空间、zh/en 键集及动态侧栏标签。
+测试使用 Node.js 内置 `node:test`，不依赖真实 DSH、真实 DeepSeek 服务或真实 API Key：
+
+- `test/index.test.js`：10 个宿主端用例，覆盖凭据处理、五个固定错误码、无 `.code` 异常兜底、超时与网络/HTTP 错误、非法响应、字段白名单、空余额、GET/405 路由和配置边界。
+- `test/client.test.js`：1 个客户端契约用例，通过真实模块工厂验证模块 ID、`require('react')`、服务注入、词典命名空间、zh/en 键集及动态侧栏标签。
+
+客户端契约测试不渲染 `BillingSection`，因此 fetch 生命周期、卸载取消、刷新交互、状态渲染和时间本地化仍由下方手动清单验证。只有当 UI 频繁变化、出现真实回归或项目接入浏览器 CI 时，再考虑引入渲染级测试。
 
 ### 手动检查清单
 
 - 正常余额：显示可用 / 充值 / 赠送余额与「最后更新」时间。
 - 缺失凭据：显示「未配置 DeepSeek API 密钥」（zh）/ 对应英文（en），而非原始异常。
-- 刷新：点击刷新，旧结果保留、按钮进入「刷新中…」。
+- 刷新：点击刷新，旧结果保留、按钮进入「刷新中…」；连续刷新或离开页面后，旧请求不得覆盖新状态。
 - 中英文切换：导航、标题、按钮、加载/错误态、时间格式即时切换，无需刷新。
 - 明暗主题：颜色跟随 `currentColor` 自动适配。
 - 窄屏（≤620px）：header 与 breakdown 纵向布局正常。
@@ -343,6 +351,7 @@ Web profile 挂载了客户端 HMR，会轮询当前已加载包的 `lib/client.
 
 - 只展示 `balance_infos[0]`，多币种账户只显示第一条。
 - 币种和金额仅校验为非空字符串，不验证 ISO 币种代码或十进制定点格式。
+- 路由当前会透传异常自带的任意字符串 `.code`；插件自身只产生五个固定码，客户端对未知码显示通用错误。后续可在服务端按固定码集合做白名单兜底。
 - 余额只在打开区块 / 手动刷新时拉取，不自动轮询。
 - 币种以 ISO 代码（如 `CNY`）展示，未做符号美化。
 - 侧边栏 label 依赖设置面板外壳对 `locale` revision 的订阅（框架已保证），插件自身不在注册时固化文案。

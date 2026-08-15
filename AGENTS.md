@@ -31,7 +31,10 @@ package.json       DSH bundle/client 声明与包入口
 cordis.patch.yml   按包名插入宿主插件
 lib/index.js       凭据、DeepSeek 请求、余额服务和 HTTP 路由
 lib/client.js      设置页 UI、CSS、请求状态和中英文词典
-docs/              README 使用的中英文截图
+test/index.test.js 宿主服务、错误码、路由和配置测试
+test/client.test.js 客户端模块、注入和国际化契约测试
+docs/design.md     当前实现、运行契约、设计取舍和验证清单
+docs/image_*.png   README 使用的中英文截图
 README.md          安装、配置和使用说明
 ```
 
@@ -41,10 +44,13 @@ README.md          安装、配置和使用说明
 
 - API Key 只能通过 `ctx.credentials.resolve('DEEPSEEK_API_KEY')` 获取。
 - 不得把 API Key 写入代码、日志、响应、文档、截图或测试数据。
+- 凭据值必须先 `trim()`；缺失、非字符串或全空白统一报 `missing_credential`。
 - 保留请求超时、取消、HTTP 状态、JSON 和 `balance_infos` 校验。
+- `balance_infos[0]` 为空时返回 `null`；非空时必须校验 `currency`、`total_balance`、`granted_balance`、`topped_up_balance` 为非空字符串，并只返回这四个白名单字段。
 - 不在插件启动时主动查询余额。
 - 本地路由仅允许 `GET`，保留 `Cache-Control: no-store`。
-- 客户端只接收余额或稳定错误码，不接收堆栈、内部路径和上游正文。
+- HTTP 失败响应统一使用 `{ ok: false, code }`；`code` 只能取下方固定值，缺失或未知码兜底为 `billing_service_unavailable`，不得返回堆栈、内部路径和上游正文。
+- `config.endpoint` 会接收 Bearer 凭据，只能视为受信任的宿主配置；改变、移除或收紧该配置前按公开接口变更处理。
 
 错误码固定为：
 
@@ -56,7 +62,7 @@ billing_service_unavailable
 invalid_response
 ```
 
-新增错误码时同步更新 `ERROR_KEY`、中英文词典和 README。
+新增错误码时同步更新 `ERROR_CODES`、`ERROR_KEY`、中英文词典、测试、设计文档和 README。
 
 ## 客户端规则
 
@@ -81,13 +87,16 @@ invalid_response
 - 标识符保持一致：包名、客户端模块 ID 与 patch `name` 为 `dsh-deepseek-billing`；宿主插件 `name` 与 patch `id` 为 `deepseek-billing`。
 - 改变安装方式、公开接口、包名或删除文件前先征得用户同意。
 - UI、安装方式、错误码或配置变化时同步更新 README；UI 变化时更新 `docs/` 截图。
+- 宿主逻辑变化时同步更新 `test/index.test.js`；模块外壳、注入或词典变化时同步更新 `test/client.test.js`。
+- 测试使用 Node.js 内置 `node:test`，不得依赖真实 DSH、真实 DeepSeek 请求或真实 API Key；替换 `globalThis.fetch`、`window`、`console.error` 等全局对象时必须在 `finally` 中恢复。
 
 至少运行：
 
 ```bash
+node --test
 node --check lib/index.js
 node --check lib/client.js
 node -e "JSON.parse(require('fs').readFileSync('package.json'))"
 ```
 
-手动检查：正常余额、缺失凭据、刷新、中文/英文切换、明暗主题和窄屏布局。本地链接安装可由 Web 客户端 HMR 检测；GitHub 安装需重新安装/更新并重启 DSH Web，必要时 `Ctrl+F5`。
+`test/client.test.js` 只做客户端契约校验，不替代真实渲染。手动检查：正常余额、缺失凭据、刷新与旧请求取消、中文/英文切换、明暗主题和窄屏布局。本地链接安装可由 Web 客户端 HMR 检测；GitHub 安装需重新安装/更新并重启 DSH Web，必要时 `Ctrl+F5`。
