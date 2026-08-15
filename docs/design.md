@@ -37,6 +37,7 @@ flowchart LR
     KEY["credentials<br/>DEEPSEEK_API_KEY"]
     DS["DeepSeek<br/>/user/balance"]
     LOC["DSH locale 服务<br/>zh / en"]
+    PREF["settings<br/>locale.preference"]
     CMD["commands<br/>/deepseek-billing"]
     UI -->|"GET /api/deepseek-billing/balance"| API
     API --> SVC
@@ -44,14 +45,16 @@ flowchart LR
     SVC --> DS
     DS --> SVC --> API --> UI
     LOC --> UI
+    LOC --> PREF
+    PREF --> CMD
     CMD --> SVC
 ```
 
-数据流分两条：
+数据流分三条：
 
 1. **余额链路（请求/响应）**：客户端 `fetch` 本地路由 → 路由调用 `deepseekBilling.getBalance()` → 服务从 `credentials` 解析 `DEEPSEEK_API_KEY` → 携带 `Authorization: Bearer` 请求 DeepSeek `/user/balance` → 校验并白名单化首条余额 → 客户端渲染。
-2. **语言链路（单向）**：DSH `locale` 服务只影响客户端 UI（文案 + 时间格式），不参与服务端与上游交互。
-3. **命令链路**：对话输入 `/deepseek-billing` → `commands` 服务分发 → 复用 `deepseekBilling.getBalance()` → 返回「主标签 + 币种 + 金额」的文本；主标签跟随宿主侧已持久化的 locale 偏好，不可用时省略标签。
+2. **语言链路**：浏览器 `locale` 服务驱动客户端 UI 的文案和时间格式，并把显式选择持久化为宿主 `settings` 的 `locale.preference`；该偏好只影响命令呈现，不改变 DeepSeek 请求。
+3. **命令链路**：对话输入 `/deepseek-billing` → `commands` 服务分发 → 复用 `deepseekBilling.getBalance()` → 返回余额、空态、错误或用法提示；可见文案跟随宿主侧已持久化的 locale 偏好，不可用时回退为无标签余额、破折号、稳定错误码或固定英文用法提示。
 
 ## 4. 打包与分发模型
 
@@ -86,10 +89,11 @@ DSH 的 `clientModules` 服务（Node 半）扫描宿主 Loader 里声明了 `ds
 
 由于本包没有构建脚本，`client.js` 就是最终分发文件，`clientModules` 直接读 `lib/client.js`（无需 `pnpm run build`，也没有 `prepare` 脚本）。
 
-### 4.3 两层「inject」的区别
+### 4.3 三类「inject」的区别
 
 容易混淆，务必区分：
 
+- **`lib/index.js` 的 `export const inject`**：宿主端 Cordis 服务依赖，当前为 `credentials`、`webServer`、`commands`；其中 `settings` 通过 `ctx.get('settings')` 可选读取，不作为硬注入，缺失时命令回退中性文案。
 - **package.json 的 `dsh.client.inject`**：客户端模块图边，值是**包名/模块 id**（`@deepseek-ai/dsh-client-runtime`、`@deepseek-ai/dsh-client-locale`、`@deepseek-ai/dsh-client-ui-settings-general`），决定浏览器端 bundle 的加载顺序。
 - **`lib/client.js` 的 `exports.inject`**：cordis **服务**依赖，值 `["slots", "locale"]`，决定浏览器端 cordis 上下文里可用哪些服务。
 
@@ -113,7 +117,7 @@ const DEFAULT_TIMEOUT_MS = 10_000
 | `missing_credential` | 凭证值缺失、不是字符串或 `trim()` 后为空 | 未配置 DeepSeek API 密钥 | DeepSeek API key is not configured |
 | `balance_timeout` | 上游请求超过 `timeoutMs`（`AbortError`） | 获取余额超时 | Balance request timed out |
 | `balance_fetch_failed` | `fetch` 网络层失败（非超时） | 获取余额失败 | Failed to fetch balance |
-| `billing_service_unavailable` | 上游返回非 2xx、请求方法不是 GET，或路由捕获没有字符串 `.code` 的异常 | 计费服务暂不可用 | Billing service is temporarily unavailable |
+| `billing_service_unavailable` | 上游返回非 2xx、请求方法不是 GET，或路由捕获缺失/未知 `.code` 的异常 | 计费服务暂不可用 | Billing service is temporarily unavailable |
 | `invalid_response` | 上游返回非法 JSON / 非法 payload / 非法余额条目 | 余额接口返回异常数据 | Balance endpoint returned unexpected data |
 
 ### 5.2 服务 `deepseekBilling`
@@ -167,8 +171,10 @@ DeepSeek 返回（客户端实际用到的字段）：
 
 handler 复用 `deepseekBilling.getBalance()`；主标签、空态和固定错误码跟随宿主侧 locale 偏好，无法确定语言时回退为语言中性文本或稳定错误码：
 
-| 场景 | 返回 `CommandResult` |
+| 场景 | 呈现或返回 |
 |---|---|
+| 发现菜单说明（zh） | `查看 DeepSeek 账户余额` |
+| 发现菜单说明（en / 无偏好） | `show the DeepSeek account balance` |
 | 成功且有余额（zh） | `{ kind: 'success', text: '可用余额 CNY 12.34' }` |
 | 成功且有余额（en） | `{ kind: 'success', text: 'Available balance CNY 12.34' }` |
 | 成功但无余额（zh） | `{ kind: 'success', text: '暂无余额信息' }` |
@@ -179,7 +185,9 @@ handler 复用 `deepseekBilling.getBalance()`；主标签、空态和固定错�
 
 命令不接受参数，handler 检查 `invocation.rawInput.trim()`，非空时直接返回本地化用法错误，不发起余额请求。
 
-语言偏好是 Host-backed：`dsh-client-locale` 的宿主半把 `locale.preference` 注册进宿主 `settings` 服务并持久化到 `settings.yaml`。命令 handler 经 `ctx.get('settings')` 读 `settings.get('locale').preference`（`zh`/`en`）选择文案；`settings` 服务缺失、读取失败或 `preference` 未知时回退为无标签的 `CNY 12.34`、空态 `—`、稳定错误码或中性用法提示，语言读取本身不会阻断余额查询。命令的 `description`（发现 UI 摘要）与内置命令一致采用英文。
+语言偏好是 Host-backed：`dsh-client-locale` 的宿主半把 `locale.preference` 注册进宿主 `settings` 服务并持久化到 `settings.yaml`。命令 handler 经 `ctx.get('settings')` 读 `settings.get('locale').preference`（`zh`/`en`）选择文案；`settings` 服务缺失、读取失败或 `preference` 未知时回退为无标签的 `CNY 12.34`、空态 `—`、稳定错误码或固定英文用法提示，语言读取本身不会阻断余额查询。
+
+命令的 `description` 就是截图中斜杠发现菜单的灰色摘要：zh 为“查看 DeepSeek 账户余额”，en 与无 Host 偏好时为 `show the DeepSeek account balance`。插件监听 `settings/updated` 的 `locale` 变化；摘要变化时注销并重新注册命令，`commands` 服务发出 `commands/change`，客户端目录随即重新拉取，因此持久化语言切换后无需重启。
 
 ## 6. 客户端设计（lib/client.js）
 
@@ -323,7 +331,7 @@ const updatedTime = state.updatedAt
 3. **币种透传不做换算**：金额/币种是账户事实，任何「按语言换算」都会造成数据错误。代价是 `¥`/`$` 不按语言美化，改用 ISO 代码显示以保真。
 4. **手动 `bind` + `useSyncExternalStore` 而非 slot 的 `locale:` 座位**：需要 `snapshot.active` 来按语言格式化时间，`useSyncExternalStore` 直接拿到 `active` 并驱动重渲染；slot 的 `locale:` 座位只注入 `t` 拿不到 `active`。
 5. **`502` 作为统一失败态**：本地路由是上游代理，失败即「网关错误」，客户端不看具体 HTTP 状态码、只看 `code`。
-6. **命令文案跟随 Host-backed locale**：`locale.preference` 存在宿主 `settings`，命令 handler 在宿主端直接读它选择 zh/en 的主标签、空态和错误文案；`settings` 缺失、读取失败或偏好未知时回退语言中性文本/稳定错误码。命令不含「充值/赠送」明细，明细仍在设置页查看。
+6. **命令文案跟随 Host-backed locale**：`locale.preference` 存在宿主 `settings`，命令在宿主端直接读取它选择 zh/en 的发现菜单说明、主标签、空态、错误和用法提示；偏好更新时通过重新注册命令触发客户端目录刷新。`settings` 缺失、读取失败或偏好未知时回退英文菜单说明及语言中性文本/稳定错误码。命令不含「充值/赠送」明细，明细仍在设置页查看。
 
 ## 9. 安全与隐私
 
@@ -353,7 +361,7 @@ node --test
 
 测试使用 Node.js 内置 `node:test`，不依赖真实 DSH、真实 DeepSeek 服务或真实 API Key：
 
-- `test/index.test.js`：15 个宿主端用例，覆盖凭据处理、五个固定错误码、缺失/未知 `.code` 兜底、超时与网络/HTTP 错误、非法响应、字段白名单、空余额、GET/405 路由、`/deepseek-billing` 命令（zh/en 本地化、设置读取失败与语言中性回退）和配置边界。
+- `test/index.test.js`：15 个宿主端用例，覆盖凭据处理、五个固定错误码、缺失/未知 `.code` 兜底、超时与网络/HTTP 错误、非法响应、字段白名单、空余额、GET/405 路由、`/deepseek-billing` 命令（zh/en 菜单说明与结果本地化、语言更新重注册、设置读取失败和语言中性回退）及配置边界。
 - `test/client.test.js`：1 个客户端契约用例，通过真实模块工厂验证模块 ID、`require('react')`、服务注入、词典命名空间、zh/en 键集及动态侧栏标签。
 
 客户端契约测试不渲染 `BillingSection`，因此 fetch 生命周期、卸载取消、刷新交互、状态渲染和时间本地化仍由下方手动清单验证。只有当 UI 频繁变化、出现真实回归或项目接入浏览器 CI 时，再考虑引入渲染级测试。
@@ -366,7 +374,8 @@ node --test
 - 中英文切换：导航、标题、按钮、加载/错误态、时间格式即时切换，无需刷新。
 - 明暗主题：颜色跟随 `currentColor` 自动适配。
 - 窄屏（≤620px）：header 与 breakdown 纵向布局正常。
-- 斜杠命令：`/deepseek-billing` 在宿主持久化语言为 zh/en 时使用对应主标签、空态和错误文案；无可用偏好或设置读取失败时返回语言中性文本/稳定错误码。
+- 斜杠命令：`/deepseek-billing` 在宿主持久化语言为 zh/en 时使用对应菜单说明、主标签、空态和错误文案；切换语言后菜单说明无需重启即可更新；无可用偏好或设置读取失败时使用英文菜单说明及语言中性文本/稳定错误码。
+- 命令参数：直接输入 `/deepseek-billing` 正常查询；附加任意非空参数时返回本地化用法错误，且不发起 DeepSeek 请求。
 
 ### 验证约定
 

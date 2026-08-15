@@ -16,6 +16,7 @@ flowchart LR
     KEY["credentials<br/>DEEPSEEK_API_KEY"]
     DS["DeepSeek<br/>/user/balance"]
     LOC["DSH locale<br/>zh / en"]
+    PREF["settings<br/>locale.preference"]
     CMD["commands<br/>/deepseek-billing"]
     UI -->|"GET /api/deepseek-billing/balance"| API
     API --> SVC
@@ -23,6 +24,8 @@ flowchart LR
     SVC --> DS
     DS --> SVC --> API --> UI
     LOC --> UI
+    LOC --> PREF
+    PREF --> CMD
     CMD --> SVC
 ```
 
@@ -54,7 +57,8 @@ README.md          安装、配置和使用说明
 - HTTP 失败响应统一使用 `{ ok: false, code }`；`code` 只能取下方固定值，缺失或未知码兜底为 `billing_service_unavailable`，不得返回堆栈、内部路径和上游正文。
 - `config.endpoint` 会接收 Bearer 凭据，只能视为受信任的宿主配置；改变、移除或收紧该配置前按公开接口变更处理。
 - 保留 `commands` 注入和 `/deepseek-billing` 命令；命令必须复用 `deepseekBilling.getBalance()`，不得另建凭据或请求链路。
-- 命令可见文本只读取宿主 `settings` 中的 `locale.preference`；zh/en 下本地化主标签、空态和固定错误码，服务读取失败、偏好缺失或未知时返回语言中性文本/稳定错误码，不得因此让余额查询失败。
+- 命令可见文本只读取宿主 `settings` 中的 `locale.preference`；zh/en 下本地化发现菜单说明、主标签、空态、固定错误码和用法提示，服务读取失败、偏好缺失或未知时返回英文菜单说明、语言中性余额文本、固定英文用法提示或稳定错误码，不得因此让余额查询失败。
+- 监听 `settings/updated` 的 `locale` 变化；菜单说明发生变化时先注销再重新注册命令，依靠 `commands/change` 让已打开的客户端目录重新拉取。插件卸载时必须同时清理监听器和当前命令注册。
 - `/deepseek-billing` 不接受参数；handler 必须检查 `invocation.rawInput`，多余输入返回本地化用法错误。
 
 错误码固定为：
@@ -104,4 +108,4 @@ node --check lib/client.js
 node -e "JSON.parse(require('fs').readFileSync('package.json'))"
 ```
 
-`test/client.test.js` 只做客户端契约校验，不替代真实渲染。手动检查：正常余额、缺失凭据、刷新与旧请求取消、中文/英文切换、明暗主题、窄屏布局，以及 `/deepseek-billing` 在 zh/en、无持久化语言和错误状态下的输出。本地链接安装可由 Web 客户端 HMR 检测；GitHub 安装需重新安装/更新并重启 DSH Web，必要时 `Ctrl+F5`。
+`test/client.test.js` 只做客户端契约校验，不替代真实渲染。手动检查：正常余额、缺失凭据、刷新与旧请求取消、中文/英文切换、明暗主题、窄屏布局，以及 `/deepseek-billing` 的菜单说明在 zh/en 间实时更新、无持久化语言回退、错误状态和带多余参数时的输出。本地链接安装可由 Web 客户端 HMR 检测；GitHub 安装需重新安装/更新并重启 DSH Web，必要时 `Ctrl+F5`。

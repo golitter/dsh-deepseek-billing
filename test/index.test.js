@@ -7,14 +7,16 @@ function createContext(credential = { value: 'fixture-credential' }, config = {}
   let service
   let handler
   let command
+  let settingsListener
+  let currentLocalePreference = localePreference
 
-  const settings = localePreference === null
+  const settings = currentLocalePreference === null
     ? undefined
     : {
         get(ns) {
           assert.equal(ns, 'locale')
-          if (typeof localePreference === 'function') return localePreference()
-          return { preference: localePreference }
+          if (typeof currentLocalePreference === 'function') return currentLocalePreference()
+          return { preference: currentLocalePreference }
         },
       }
 
@@ -38,8 +40,17 @@ function createContext(credential = { value: 'fixture-credential' }, config = {}
     commands: {
       register(definition) {
         command = definition
-        return () => {}
+        return () => {
+          if (command === definition) command = undefined
+        }
       },
+    },
+    on(name, listener) {
+      assert.equal(name, 'settings/updated')
+      settingsListener = listener
+      return () => {
+        if (settingsListener === listener) settingsListener = undefined
+      }
     },
     effect(register) {
       return register()
@@ -47,7 +58,16 @@ function createContext(credential = { value: 'fixture-credential' }, config = {}
   }
 
   apply(ctx, config)
-  return { service, handler, command }
+  return {
+    service,
+    handler,
+    command,
+    getCommand: () => command,
+    updateLocalePreference(next) {
+      currentLocalePreference = next
+      settingsListener?.('locale', { preference: next }, {}, 'update')
+    },
+  }
 }
 
 function jsonResponse(payload, options = {}) {
@@ -271,15 +291,21 @@ test('registers a slash command returning localized balance text', async () => {
     })
   }
   try {
-    const { command } = createContext()
+    const context = createContext()
+    const { command } = context
     assert.equal(command.name, 'deepseek-billing')
-    assert.equal(command.description, 'show the DeepSeek account balance')
+    assert.equal(command.description, '查看 DeepSeek 账户余额')
     assert.deepEqual(await command.handler({ rawInput: '' }), { kind: 'success', text: '可用余额 CNY 12.34' })
     assert.deepEqual(await command.handler({ rawInput: ' unexpected' }), {
       kind: 'error',
       text: '此命令不接受参数，请直接输入 /deepseek-billing',
     })
     assert.equal(fetchCalls, 1)
+
+    context.updateLocalePreference('en')
+    assert.equal(context.getCommand().description, 'show the DeepSeek account balance')
+    context.updateLocalePreference('zh')
+    assert.equal(context.getCommand().description, '查看 DeepSeek 账户余额')
   } finally {
     globalThis.fetch = originalFetch
   }
@@ -297,6 +323,7 @@ test('slash command follows the en locale preference', async () => {
   })
   try {
     const { command } = createContext(undefined, undefined, 'en')
+    assert.equal(command.description, 'show the DeepSeek account balance')
     assert.deepEqual(await command.handler({ rawInput: '' }), { kind: 'success', text: 'Available balance CNY 12.34' })
   } finally {
     globalThis.fetch = originalFetch
