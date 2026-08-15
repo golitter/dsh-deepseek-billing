@@ -3,11 +3,25 @@ import test from 'node:test'
 
 import { apply } from '../lib/index.js'
 
-function createContext(credential = { value: 'fixture-credential' }, config = {}) {
+function createContext(credential = { value: 'fixture-credential' }, config = {}, localePreference = 'zh') {
   let service
   let handler
+  let command
+
+  const settings = localePreference === null
+    ? undefined
+    : {
+        get(ns) {
+          assert.equal(ns, 'locale')
+          if (typeof localePreference === 'function') return localePreference()
+          return { preference: localePreference }
+        },
+      }
 
   const ctx = {
+    get(name) {
+      return name === 'settings' ? settings : undefined
+    },
     credentials: {
       resolve: async () => typeof credential === 'function' ? credential() : credential,
     },
@@ -21,13 +35,19 @@ function createContext(credential = { value: 'fixture-credential' }, config = {}
         return () => {}
       },
     },
+    commands: {
+      register(definition) {
+        command = definition
+        return () => {}
+      },
+    },
     effect(register) {
       return register()
     },
   }
 
   apply(ctx, config)
-  return { service, handler }
+  return { service, handler, command }
 }
 
 function jsonResponse(payload, options = {}) {
@@ -220,10 +240,125 @@ test('GET route returns balances and stable service errors', async () => {
     await fallbackHandler({ method: 'GET' }, fallback.res)
     assert.equal(fallback.output.status, 502)
     assert.deepEqual(fallback.output.body, { ok: false, code: 'billing_service_unavailable' })
+
+    const { handler: foreignCodeHandler } = createContext(() => {
+      const error = new Error('credential service failed with a foreign code')
+      error.code = 'SETTINGS_CONFLICT'
+      throw error
+    })
+    const foreignCode = createResponse()
+    await foreignCodeHandler({ method: 'GET' }, foreignCode.res)
+    assert.equal(foreignCode.output.status, 502)
+    assert.deepEqual(foreignCode.output.body, { ok: false, code: 'billing_service_unavailable' })
   } finally {
     globalThis.fetch = originalFetch
     console.error = originalConsoleError
   }
+})
+
+test('registers a slash command returning localized balance text', async () => {
+  const originalFetch = globalThis.fetch
+  let fetchCalls = 0
+  globalThis.fetch = async () => {
+    fetchCalls += 1
+    return jsonResponse({
+      balance_infos: [{
+        currency: 'CNY',
+        total_balance: '12.34',
+        granted_balance: '2.34',
+        topped_up_balance: '10.00',
+      }],
+    })
+  }
+  try {
+    const { command } = createContext()
+    assert.equal(command.name, 'deepseek-billing')
+    assert.equal(command.description, 'show the DeepSeek account balance')
+    assert.deepEqual(await command.handler({ rawInput: '' }), { kind: 'success', text: '可用余额 CNY 12.34' })
+    assert.deepEqual(await command.handler({ rawInput: ' unexpected' }), {
+      kind: 'error',
+      text: '此命令不接受参数，请直接输入 /deepseek-billing',
+    })
+    assert.equal(fetchCalls, 1)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('slash command follows the en locale preference', async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => jsonResponse({
+    balance_infos: [{
+      currency: 'CNY',
+      total_balance: '12.34',
+      granted_balance: '2.34',
+      topped_up_balance: '10.00',
+    }],
+  })
+  try {
+    const { command } = createContext(undefined, undefined, 'en')
+    assert.deepEqual(await command.handler({ rawInput: '' }), { kind: 'success', text: 'Available balance CNY 12.34' })
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('slash command falls back to neutral text without a locale', async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => jsonResponse({
+    balance_infos: [{
+      currency: 'CNY',
+      total_balance: '12.34',
+      granted_balance: '2.34',
+      topped_up_balance: '10.00',
+    }],
+  })
+  try {
+    const { command } = createContext(undefined, undefined, null)
+    assert.deepEqual(await command.handler({ rawInput: '' }), { kind: 'success', text: 'CNY 12.34' })
+
+    const { command: unknownLocale } = createContext(undefined, undefined, 'fr')
+    assert.deepEqual(await unknownLocale.handler({ rawInput: '' }), { kind: 'success', text: 'CNY 12.34' })
+
+    const { command: failingSettings } = createContext(undefined, undefined, () => {
+      throw new Error('settings service failed')
+    })
+    assert.deepEqual(await failingSettings.handler({ rawInput: '' }), { kind: 'success', text: 'CNY 12.34' })
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('slash command renders a neutral dash for empty balance', async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => jsonResponse({ balance_infos: [] })
+  try {
+    const { command } = createContext()
+    assert.deepEqual(await command.handler({ rawInput: '' }), { kind: 'success', text: '暂无余额信息' })
+
+    const { command: neutral } = createContext(undefined, undefined, null)
+    assert.deepEqual(await neutral.handler({ rawInput: '' }), { kind: 'success', text: '—' })
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('slash command localizes stable errors and keeps a neutral fallback', async () => {
+  const { command: missing } = createContext({ value: ' ' })
+  assert.deepEqual(await missing.handler({ rawInput: '' }), { kind: 'error', text: '未配置 DeepSeek API 密钥' })
+
+  const { command: unknown } = createContext(() => { throw new Error('credential service failed') })
+  assert.deepEqual(await unknown.handler({ rawInput: '' }), { kind: 'error', text: '计费服务暂不可用' })
+
+  const { command: foreignCode } = createContext(() => {
+    const error = new Error('credential service failed with a foreign code')
+    error.code = 'SETTINGS_CONFLICT'
+    throw error
+  })
+  assert.deepEqual(await foreignCode.handler({ rawInput: '' }), { kind: 'error', text: '计费服务暂不可用' })
+
+  const { command: neutral } = createContext({ value: ' ' }, undefined, null)
+  assert.deepEqual(await neutral.handler({ rawInput: '' }), { kind: 'error', text: 'missing_credential' })
 })
 
 test('validates timeout configuration and forwards endpoint configuration', async () => {

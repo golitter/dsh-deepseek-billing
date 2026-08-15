@@ -4,7 +4,7 @@
 
 ## 项目
 
-`dsh-deepseek-billing` 是 DSH 双端插件：宿主读取 DeepSeek API 余额，客户端在“设置 → 计费 / Billing”展示余额，并随 DSH 在中英文间实时切换。
+`dsh-deepseek-billing` 是 DSH 双端插件：宿主读取 DeepSeek API 余额并提供 `/deepseek-billing` 斜杠命令，客户端在“设置 → 计费 / Billing”展示余额，并随 DSH 在中英文间实时切换。
 
 ## 架构
 
@@ -16,12 +16,14 @@ flowchart LR
     KEY["credentials<br/>DEEPSEEK_API_KEY"]
     DS["DeepSeek<br/>/user/balance"]
     LOC["DSH locale<br/>zh / en"]
+    CMD["commands<br/>/deepseek-billing"]
     UI -->|"GET /api/deepseek-billing/balance"| API
     API --> SVC
     SVC --> KEY
     SVC --> DS
     DS --> SVC --> API --> UI
     LOC --> UI
+    CMD --> SVC
 ```
 
 ## 文件
@@ -29,9 +31,9 @@ flowchart LR
 ```text
 package.json       DSH bundle/client 声明与包入口
 cordis.patch.yml   按包名插入宿主插件
-lib/index.js       凭据、DeepSeek 请求、余额服务和 HTTP 路由
+lib/index.js       凭据、DeepSeek 请求、余额服务、HTTP 路由和斜杠命令
 lib/client.js      设置页 UI、CSS、请求状态和中英文词典
-test/index.test.js 宿主服务、错误码、路由和配置测试
+test/index.test.js 宿主服务、错误码、路由、命令和配置测试
 test/client.test.js 客户端模块、注入和国际化契约测试
 docs/design.md     当前实现、运行契约、设计取舍和验证清单
 docs/image_*.png   README 使用的中英文截图
@@ -51,6 +53,9 @@ README.md          安装、配置和使用说明
 - 本地路由仅允许 `GET`，保留 `Cache-Control: no-store`。
 - HTTP 失败响应统一使用 `{ ok: false, code }`；`code` 只能取下方固定值，缺失或未知码兜底为 `billing_service_unavailable`，不得返回堆栈、内部路径和上游正文。
 - `config.endpoint` 会接收 Bearer 凭据，只能视为受信任的宿主配置；改变、移除或收紧该配置前按公开接口变更处理。
+- 保留 `commands` 注入和 `/deepseek-billing` 命令；命令必须复用 `deepseekBilling.getBalance()`，不得另建凭据或请求链路。
+- 命令可见文本只读取宿主 `settings` 中的 `locale.preference`；zh/en 下本地化主标签、空态和固定错误码，服务读取失败、偏好缺失或未知时返回语言中性文本/稳定错误码，不得因此让余额查询失败。
+- `/deepseek-billing` 不接受参数；handler 必须检查 `invocation.rawInput`，多余输入返回本地化用法错误。
 
 错误码固定为：
 
@@ -62,7 +67,7 @@ billing_service_unavailable
 invalid_response
 ```
 
-新增错误码时同步更新 `ERROR_CODES`、`ERROR_KEY`、中英文词典、测试、设计文档和 README。
+新增错误码时同步更新 `ERROR_CODES`、`ERROR_KEY`、客户端中英文词典、宿主 `COMMAND_MESSAGES`、测试、设计文档和 README。
 
 ## 客户端规则
 
@@ -79,7 +84,7 @@ invalid_response
 - `zh`、`en` 必须键完全一致；所有可见文案使用 `t(key)`。
 - 侧边栏使用 `label: () => t('nav')`，不能写死语言。
 - 使用 `React.useSyncExternalStore` 订阅 `ctx.locale`，切换语言后立即更新。
-- 服务端只返回错误码，翻译由客户端完成。
+- HTTP 路由只返回错误码，翻译由客户端完成；宿主斜杠命令直接返回面向用户的本地化文本。
 
 ## 修改与验证
 
@@ -99,4 +104,4 @@ node --check lib/client.js
 node -e "JSON.parse(require('fs').readFileSync('package.json'))"
 ```
 
-`test/client.test.js` 只做客户端契约校验，不替代真实渲染。手动检查：正常余额、缺失凭据、刷新与旧请求取消、中文/英文切换、明暗主题和窄屏布局。本地链接安装可由 Web 客户端 HMR 检测；GitHub 安装需重新安装/更新并重启 DSH Web，必要时 `Ctrl+F5`。
+`test/client.test.js` 只做客户端契约校验，不替代真实渲染。手动检查：正常余额、缺失凭据、刷新与旧请求取消、中文/英文切换、明暗主题、窄屏布局，以及 `/deepseek-billing` 在 zh/en、无持久化语言和错误状态下的输出。本地链接安装可由 Web 客户端 HMR 检测；GitHub 安装需重新安装/更新并重启 DSH Web，必要时 `Ctrl+F5`。
