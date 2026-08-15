@@ -7,7 +7,7 @@
 `dsh-deepseek-billing` 是一个 **DSH 双端（dual-face）插件**，在 DeepSeek Harness 的 Web 设置页里展示 DeepSeek API 账户余额：
 
 - **宿主半（host half）**：读取 DeepSeek `/user/balance` 接口，以服务 `deepseekBilling` 暴露给宿主，通过本地 HTTP 路由把结果给浏览器，并注册 `/deepseek-billing` 斜杠命令在对话中直接返回余额。
-- **客户端半（client half）**：在「设置 → 计费 / Billing」区块渲染余额，接入 DSH 的 `locale` 服务，界面随中英文实时切换。
+- **客户端半（client half）**：在「设置 → 计费 / Billing」区块渲染余额，接入 DSH 的 `locale` 服务，并把本地执行完成的余额命令结果送到对应会话的输入提示，让新建空白会话保持 Hero 布局。
 
 两个半共用同一个 npm 包：宿主端通过 bundle patch 注入，客户端通过 `dsh.client` 声明被 `clientModules` 服务扫描进浏览器。
 
@@ -39,6 +39,7 @@ flowchart LR
     LOC["DSH locale 服务<br/>zh / en"]
     PREF["settings<br/>locale.preference"]
     CMD["commands<br/>/deepseek-billing"]
+    NOTICE["command/executed<br/>输入框临时提示"]
     UI -->|"GET /api/deepseek-billing/balance"| API
     API --> SVC
     SVC --> KEY
@@ -48,13 +49,14 @@ flowchart LR
     LOC --> PREF
     PREF --> CMD
     CMD --> SVC
+    CMD --> NOTICE
 ```
 
 数据流分三条：
 
 1. **余额链路（请求/响应）**：客户端 `fetch` 本地路由 → 路由调用 `deepseekBilling.getBalance()` → 服务从 `credentials` 解析 `DEEPSEEK_API_KEY` → 携带 `Authorization: Bearer` 请求 DeepSeek `/user/balance` → 校验并白名单化首条余额 → 客户端渲染。
 2. **语言链路**：浏览器 `locale` 服务驱动客户端 UI 的文案和时间格式，并把显式选择持久化为宿主 `settings` 的 `locale.preference`；该偏好只影响命令呈现，不改变 DeepSeek 请求。
-3. **命令链路**：对话输入 `/deepseek-billing` → `commands` 服务分发 → 复用 `deepseekBilling.getBalance()` → 返回余额、空态、错误或用法提示；可见文案跟随宿主侧已持久化的 locale 偏好，不可用时回退为无标签余额、破折号、稳定错误码或固定英文用法提示。
+3. **命令链路**：对话输入 `/deepseek-billing` → 宿主 `commands` 服务复用 `deepseekBilling.getBalance()` → 本地客户端收到 `command/executed` 后，把该命令的成功或错误文本送到对应会话的 composer notice。空白会话保持 Hero，不挂载对话记录页；可见文案跟随宿主侧已持久化的 locale 偏好，不可用时回退为无标签余额、破折号、稳定错误码或固定英文用法提示。
 
 ## 4. 打包与分发模型
 
@@ -94,8 +96,8 @@ DSH 的 `clientModules` 服务（Node 半）扫描宿主 Loader 里声明了 `ds
 容易混淆，务必区分：
 
 - **`lib/index.js` 的 `export const inject`**：宿主端 Cordis 服务依赖，当前为 `credentials`、`webServer`、`commands`；其中 `settings` 通过 `ctx.get('settings')` 可选读取，不作为硬注入，缺失时命令回退中性文案。
-- **package.json 的 `dsh.client.inject`**：客户端模块图边，值是**包名/模块 id**（`@deepseek-ai/dsh-client-runtime`、`@deepseek-ai/dsh-client-locale`、`@deepseek-ai/dsh-client-ui-settings-general`），决定浏览器端 bundle 的加载顺序。
-- **`lib/client.js` 的 `exports.inject`**：cordis **服务**依赖，值 `["slots", "locale"]`，决定浏览器端 cordis 上下文里可用哪些服务。
+- **package.json 的 `dsh.client.inject`**：客户端模块图边，值是**包名/模块 id**（`@deepseek-ai/dsh-client-runtime`、`@deepseek-ai/dsh-client-locale`、`@deepseek-ai/dsh-client-ui-conversation`、`@deepseek-ai/dsh-client-ui-commands`、`@deepseek-ai/dsh-client-ui-settings-general`），决定浏览器端 bundle 的加载顺序。
+- **`lib/client.js` 的 `exports.inject`**：cordis **服务**依赖，值 `["slots", "locale", "sessions"]`，决定浏览器端 cordis 上下文里可用哪些服务。
 
 ## 5. 宿主端设计（lib/index.js）
 
@@ -215,13 +217,23 @@ handler 复用 `deepseekBilling.getBalance()`；主标签、空态和固定错�
 ```js
 window.__ModuleLoader__.load({
   id: "dsh-deepseek-billing",
-  factory: (require) => { /* ... */ exports.apply = apply; exports.inject = ["slots", "locale"]; return module.exports; }
+  factory: (require) => { /* ... */ exports.apply = apply; exports.inject = ["slots", "locale", "sessions"]; return module.exports; }
 });
 ```
 
-`require('react')` 复用宿主已加载的 React（`peerDependencies` 声明 `react`）。注入 `slots`（注册设置区块）与 `locale`（词典 + 实时翻译）。
+`require('react')` 复用宿主已加载的 React（`peerDependencies` 声明 `react`）。注入 `slots`（注册设置区块）、`locale`（词典 + 实时翻译）与 `sessions`（按本地命令回执定位对应会话的输入提示出口）。
 
-### 6.2 组件状态机
+### 6.2 空白会话中的命令提示
+
+DSH 把纯通用 `command` 节点视为控制面内容，因此仅有命令事件的新会话会留在 Hero，持久命令卡不会挂载。插件监听本地客户端执行确认事件 `command/executed`：
+
+- 只处理 `name === 'deepseek-billing'`、回执到达时仍为当前选中会话、会话仍为 `composerPhase === 'blank'` 且带非空 `result.text` 的本地回执；active 会话继续只显示持久命令卡，避免重复反馈；
+- 经 `sessions.scope(sessionId)` 找到准确的会话上下文；
+- 成功文本调用 `notify('info', text)`，错误文本调用 `notify('error', text)`；
+- 离开会话时只清除插件自己发布且尚未被覆盖的精确 notice；导航后才返回的旧回执直接丢弃；
+- 提示使用 DSH 原有输入框 notice UI，不激活会话、不复制余额请求，也不影响其他浏览器标签页。
+
+### 6.3 组件状态机
 
 `BillingSection` 用 `useState` 维护单一状态对象：
 
@@ -235,7 +247,7 @@ window.__ModuleLoader__.load({
 - **失败**：`result = { ok: false, code }`，渲染错误态。
 - **空**：`result.ok` 但 `balance === null` → 显示 `t('empty')`。
 
-### 6.3 请求生命周期与竞态防护
+### 6.4 请求生命周期与竞态防护
 
 `requestRef` 持有当前 `AbortController`：
 
@@ -246,7 +258,7 @@ window.__ModuleLoader__.load({
 
 这保证「旧请求结果不会覆盖新请求状态」。
 
-### 6.4 错误码 → 文案
+### 6.5 错误码 → 文案
 
 客户端把服务端 `code` 通过 `ERROR_KEY` 映射到词典键，未知码回退 `error.generic`：
 
@@ -261,7 +273,7 @@ invalid_response             -> error.invalid_response
 
 错误态渲染：标题 `t('error.title')` + 正文 `t(errorKey)`。
 
-### 6.5 样式
+### 6.6 样式
 
 - CSS 类名统一 `ds-billing-` 前缀。
 - 颜色全部用 `currentColor` + `color-mix(in srgb, currentColor X%, transparent)`，自动适配明暗主题。
@@ -356,6 +368,7 @@ const updatedTime = state.updatedAt
 9. **endpoint 收紧为「默认锁定官方地址」**：`allowCustomEndpoint: false`（默认）时 `endpoint` 必须等于官方 DeepSeek HTTPS 地址；设 `true` 才允许自定义（任意 `https:` 或 loopback 明文 HTTP 代理）。用户名/密码/fragment、非 `http(s):` 协议一律拒绝，`redirect: 'manual'` 保证跨域重定向不会把 `Authorization` 带到新目标。
 10. **并发合并 + 低频限流**：同一时刻多个 `getBalance()` 只共享一次上游请求；路由按客户端地址做每分钟固定窗口限流（默认 30 次），超限在读取凭据之前直接返回 `429`。
 11. **复刻 DSH 的 browser-trust fence 并锁定 loopback**：`exact` 路由在 webserver 匹配中优先于 `/api` 前缀路由，会绕过连接层自带的 fence，因此路由在入口自行复刻同一道「Host loopback + 同源」判定并返回 `403 { ok:false, code }`。余额读取 API Key、发起上游、返回账户数据，属于高权限操作，故用空信任列表锁定 loopback，与 DSH `credentials`/`settings` 平面一致，`--trusted-host`（DNS-rebinding 白名单，非鉴权）不放开它。
+12. **空白会话使用临时命令提示**：不修改 DSH，也不把余额查询复制到客户端。插件只监听当前浏览器的 `command/executed` 回执，将自身命令文本送到当前空白会话的 composer notice；离开会话即清除该插件拥有的提示，导航后才返回的旧回执不再展示。Hero 和其他命令的持久化语义不受影响。
 
 ## 9. 安全与隐私
 
@@ -389,7 +402,7 @@ node --test
 测试使用 Node.js 内置 `node:test`，不依赖真实 DSH、真实 DeepSeek 服务或真实 API Key：
 
 - `test/index.test.js`：28 个宿主端用例，覆盖凭据处理、五个固定错误码、缺失/未知 `.code` 兜底、完整响应超时（含「响应头已返回、响应体挂起」）、网络/HTTP 错误、非法响应、字段白名单与长度上限、64 KiB 响应体上限、空余额、GET/405/429/403 路由（403 返回 `{ ok:false, code }`）、browser-trust fence（Host 非 loopback、缺失 Host、cross-site、跨域 Origin、loopback-only 锁定不受 trusted authority 放宽）、限流（超限不再读取凭据或请求上游）、并发合并、`redirect: 'manual'`、endpoint 校验（默认锁定官方地址、`allowCustomEndpoint` 布尔校验、userinfo/fragment/非法 URL/非 loopback HTTP 白名单）、日志脱敏、`/deepseek-billing` 命令（zh/en 菜单说明与结果本地化、语言更新重注册、设置读取失败、语言中性回退、非字符串 `rawInput`）及配置边界。
-- `test/client.test.js`：1 个客户端契约用例，通过真实模块工厂验证模块 ID、`require('react')`、服务注入、词典命名空间、zh/en 键集及动态侧栏标签。
+- `test/client.test.js`：1 个客户端契约用例，通过真实模块工厂验证模块 ID、`require('react')`、服务注入、词典命名空间、zh/en 键集、动态侧栏标签，以及 `/deepseek-billing` 回执的当前空白会话限定、成功/错误提示、切换清除和导航后过期回执丢弃。
 
 客户端契约测试不渲染 `BillingSection`，因此 fetch 生命周期、卸载取消、刷新交互、状态渲染和时间本地化仍由下方手动清单验证。只有当 UI 频繁变化、出现真实回归或项目接入浏览器 CI 时，再考虑引入渲染级测试。
 
@@ -402,6 +415,7 @@ node --test
 - 明暗主题：颜色跟随 `currentColor` 自动适配。
 - 窄屏（≤620px）：header 与 breakdown 纵向布局正常。
 - 斜杠命令：`/deepseek-billing` 在宿主持久化语言为 zh/en 时使用对应菜单说明、主标签、空态和错误文案；切换语言后菜单说明无需重启即可更新；无可用偏好或设置读取失败时使用英文菜单说明及语言中性文本/稳定错误码。
+- 空白会话命令：在全新空白会话中执行 `/deepseek-billing`，Hero 应保持不变，余额/错误显示在输入框旁的临时提示中，且只有一次上游查询；切换到其他会话再返回新建会话时，旧提示不得重新出现。
 - 命令参数：直接输入 `/deepseek-billing` 正常查询；附加任意非空参数时返回本地化用法错误，且不发起 DeepSeek 请求。
 
 ### 验证约定
@@ -426,7 +440,7 @@ Web profile 挂载了客户端 HMR，会轮询当前已加载包的 `lib/client.
 ├── cordis.patch.yml    # bundle patch：按包名插入宿主插件（id: deepseek-billing）
 ├── lib/
 │   ├── index.js        # 宿主半：服务 + 路由 + 斜杠命令 + 错误码
-│   └── client.js       # 客户端半：设置页 UI + 词典（window.__ModuleLoader__.load）
+│   └── client.js       # 客户端半：设置页 UI + 词典 + 命令临时提示（window.__ModuleLoader__.load）
 ├── docs/
 │   ├── configuration.md # 配置、安全边界与本地代理示例
 │   ├── design.md       # 本文档
