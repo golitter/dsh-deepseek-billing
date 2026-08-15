@@ -4,6 +4,9 @@
   "description": "DeepSeek account balance viewer for the DeepSeek Harness web settings page",
   "type": "module",
   "main": "./lib/index.js",
+  "scripts": {
+    "test": "node --test"
+  },
   "exports": {
     ".": "./lib/index.js",
     "./client": "./lib/client.js",

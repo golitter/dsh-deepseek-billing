@@ -126,7 +126,8 @@ const DEFAULT_TIMEOUT_MS = 10_000
 4. `!response.ok` → `billing_service_unavailable`。
 5. `response.json()` 失败 → `invalid_response`。
 6. `payload.balance_infos` 非数组 → `invalid_response`。
-7. 取 `balance_infos[0]`：`undefined` 返回 `null`；非对象 → `invalid_response`；否则返回该条目。
+7. 取 `balance_infos[0]`：`undefined` 返回 `null`；非普通对象，或四个必要字段缺失、为空、不是字符串 → `invalid_response`。
+8. 构造只包含 `currency`、`total_balance`、`granted_balance`、`topped_up_balance` 的新对象返回，避免把上游未来新增的字段自动暴露给浏览器。
 
 启动时不调用 `getBalance()`，只在请求到达时执行。
 
@@ -143,7 +144,7 @@ DeepSeek 返回（客户端实际用到的字段）：
 }
 ```
 
-宿主半校验响应容器、`balance_infos` 数组及首条记录是否为对象，不校验每个金额字段的格式；数据不做计算或币种换算。
+宿主半校验响应容器、`balance_infos` 数组、首条记录及四个必要字段，并只向客户端返回这些字段。金额仍以 DeepSeek 返回的非空字符串展示，不做计算或币种换算。
 
 ### 5.4 HTTP 路由
 
@@ -152,10 +153,10 @@ DeepSeek 返回（客户端实际用到的字段）：
 | 场景 | 状态码 | 响应体 |
 |---|---|---|
 | 成功 | `200` | `{ "ok": true, "balance": {...} }` |
-| 非 GET | `405` | `{ "ok": false, "error": "Method not allowed" }` + `Allow: GET` |
+| 非 GET | `405` | `{ "ok": false, "code": "billing_service_unavailable" }` + `Allow: GET` |
 | 任何 `getBalance()` 失败 | `502` | `{ "ok": false, "code": "<稳定错误码>" }` |
 
-统一响应头 `Cache-Control: no-store`（余额是敏感、易变数据）。余额查询失败时，响应 `code` 兜底为 `billing_service_unavailable`；`405` 是协议层例外，返回固定的 `Method not allowed`。堆栈、内部路径、上游正文只进服务端 `console.error`，绝不进响应体。
+统一响应头 `Cache-Control: no-store`（余额是敏感、易变数据）。余额查询失败及协议层 `405` 都返回稳定的 `code` 结构，未知异常兜底为 `billing_service_unavailable`。堆栈、内部路径、上游正文只进服务端 `console.error`，绝不进响应体。
 
 ## 6. 客户端设计（lib/client.js）
 
@@ -317,6 +318,14 @@ node --check lib/client.js
 node -e "JSON.parse(require('fs').readFileSync('package.json'))"
 ```
 
+### 自动测试
+
+```bash
+npm test
+```
+
+测试使用 Node.js 内置 `node:test`，不依赖真实 DSH 或 DeepSeek 服务：宿主端覆盖凭据、超时、网络/HTTP 错误、响应校验、字段白名单、路由和配置边界；客户端通过模块工厂验证模块 ID、服务注入、词典命名空间、zh/en 键集及动态侧栏标签。
+
 ### 手动检查清单
 
 - 正常余额：显示可用 / 充值 / 赠送余额与「最后更新」时间。
@@ -328,12 +337,12 @@ node -e "JSON.parse(require('fs').readFileSync('package.json'))"
 
 ### 验证约定
 
-Web profile 挂载了客户端 HMR，会轮询当前已加载包的 `lib/client.js`；只有当该文件就是正在编辑的文件（例如本地链接安装）时，修改才能实时生效。GitHub 安装产生的是 profile 内副本，本仓库改动不会自动同步，需要重新安装/更新并重启 DSH Web；浏览器仍显示旧版本时再使用 `Ctrl+F5`。zh/en 键集一致性可用脚本对比 `Object.keys(zh)` 与 `Object.keys(en)`。
+Web profile 挂载了客户端 HMR，会轮询当前已加载包的 `lib/client.js`；只有当该文件就是正在编辑的文件（例如本地链接安装）时，修改才能实时生效。GitHub 安装产生的是 profile 内副本，本仓库改动不会自动同步，需要重新安装/更新并重启 DSH Web；浏览器仍显示旧版本时再使用 `Ctrl+F5`。zh/en 键集一致性由客户端契约测试自动检查。
 
 ## 11. 已知限制与后续
 
 - 只展示 `balance_infos[0]`，多币种账户只显示第一条。
-- 只校验余额条目是对象，不进一步校验币种和金额字段格式。
+- 币种和金额仅校验为非空字符串，不验证 ISO 币种代码或十进制定点格式。
 - 余额只在打开区块 / 手动刷新时拉取，不自动轮询。
 - 币种以 ISO 代码（如 `CNY`）展示，未做符号美化。
 - 侧边栏 label 依赖设置面板外壳对 `locale` revision 的订阅（框架已保证），插件自身不在注册时固化文案。
@@ -351,6 +360,9 @@ Web profile 挂载了客户端 HMR，会轮询当前已加载包的 `lib/client.
 │   ├── design.md       # 本文档
 │   ├── image_zh.png    # 中文界面截图
 │   └── image_en.png    # 英文界面截图
+├── test/
+│   ├── index.test.js   # 宿主端服务、错误码、路由与配置测试
+│   └── client.test.js  # 客户端模块、注入与国际化契约测试
 ├── AGENTS.md           # 代码代理约束
 └── README.md           # 安装、配置、使用说明
 ```
