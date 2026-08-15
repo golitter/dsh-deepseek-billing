@@ -16,6 +16,7 @@ dsh-deepseek-billing/
 │   ├── client.test.js        # 客户端模块与契约测试
 │   └── client-render.test.js # 余额页状态、刷新、取消和翻译测试
 ├── docs/design/              # 设计文档，入口见 docs/design/README.md
+├── docs/README.en.md         # 英文 README
 ├── docs/*.png                # README 截图，不进入发布包
 ├── package.json              # DSH bundle/client 声明与包入口
 ├── cordis.patch.yml          # 宿主插件插入配置

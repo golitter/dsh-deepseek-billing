@@ -1,5 +1,7 @@
 <h1 align="center">dsh-deepseek-billing</h1>
 
+<p align="center">简体中文 · <a href="https://github.com/golitter/dsh-deepseek-billing/blob/main/docs/README.en.md">English</a></p>
+
 ## 功能概述
 
 在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 Web 设置页中增加“计费 / Billing”页面，提供：

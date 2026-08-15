@@ -12,6 +12,7 @@
 │   ├── index.js        # 宿主半：服务 + 路由 + 斜杠命令 + 错误码
 │   └── client.js       # 客户端半：设置页 UI + 词典 + 命令临时提示（window.__ModuleLoader__.load）
 ├── docs/
+│   ├── README.en.md    # 英文安装、配置和使用说明
 │   ├── image_zh.png    # 中文界面截图
 │   ├── image_en.png    # 英文界面截图
 │   ├── deepseek_billing_command_zh.png  # 斜杠命令中文截图
