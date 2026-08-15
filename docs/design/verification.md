@@ -24,8 +24,9 @@ node --test
 
 - `test/index.test.js`：28 个宿主端用例，覆盖凭据处理、五个固定错误码、缺失/未知 `.code` 兜底、完整响应超时（含「响应头已返回、响应体挂起」）、网络/HTTP 错误、非法响应、字段白名单与长度上限、64 KiB 响应体上限、空余额、GET/405/429/403 路由（403 返回 `{ ok:false, code }`）、browser-trust fence（Host 非 loopback、缺失 Host、cross-site、跨域 Origin、loopback-only 锁定不受 trusted authority 放宽）、限流（超限不再读取凭据或请求上游）、并发合并、`redirect: 'manual'`、endpoint 校验（默认锁定官方地址、`allowCustomEndpoint` 布尔校验、userinfo/fragment/非法 URL/非 loopback HTTP 白名单）、日志脱敏、`/deepseek-billing` 命令（zh/en 菜单说明与结果本地化、语言更新重注册、设置读取失败、语言中性回退、非字符串 `rawInput`）及配置边界。
 - `test/client.test.js`：1 个客户端契约用例，通过真实模块工厂验证模块 ID、`require('react')`、服务注入、词典命名空间、zh/en 键集、动态侧栏标签、命令行插槽，以及 `/deepseek-billing` 回执的当前空白会话限定、成功/错误提示、会话激活清除、60 秒到期、切换清除、导航后过期回执丢弃、命令独占过渡帧和空白阶段历史命令隐藏。
+- `test/client-render.test.js`：1 个余额页行为用例，以轻量 React hook harness 执行真实 `BillingSection`，验证初始加载、刷新时取消旧请求并保留旧余额、成功余额字段、中英文即时重渲染、固定错误码翻译，以及卸载时取消仍在进行的请求。
 
-客户端契约测试不渲染 `BillingSection`，因此 fetch 生命周期、卸载取消、刷新交互、状态渲染和时间本地化仍由下方手动清单验证。只有当 UI 频繁变化、出现真实回归或项目接入浏览器 CI 时，再考虑引入渲染级测试。
+轻量 hook harness 能验证组件状态和请求生命周期，但不包含真实 React DOM、浏览器 CSS/布局与 DSH 完整装配。因此明暗主题、窄屏布局、焦点与 ARIA 的最终呈现，以及真实宿主中的 session/input 协作仍由下方手动清单验证；项目接入浏览器 CI 后再考虑加入完整渲染级测试。
 
 ### 手动检查清单
 

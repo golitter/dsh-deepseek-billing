@@ -220,6 +220,15 @@ test('client injects required services and keeps locale keys identical', async (
     currentSession = 'session-1'
     for (const listener of listListeners) listener()
     assert.equal(currentNotice, null)
+
+    // `notify()` is the public face; exact cleanup is a guarded compatibility
+    // enhancement. A runtime without the mutable notice store must still show
+    // the result without crashing or leaking plugin-owned timers/listeners.
+    delete input.notices
+    commandExecuted('session-1', 'deepseek-billing', { kind: 'success', text: 'public-notify fallback' })
+    assert.equal(notices.at(-1)?.text, 'public-notify fallback')
+    assert.equal(timers.size, 0)
+    input.notices = noticeStore
   } finally {
     globalThis.setTimeout = previousSetTimeout
     globalThis.clearTimeout = previousClearTimeout

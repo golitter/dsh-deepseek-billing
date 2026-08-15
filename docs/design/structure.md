@@ -30,7 +30,8 @@
 │       └── structure.md
 ├── test/
 │   ├── index.test.js   # 宿主端服务、错误码、路由、命令与配置测试
-│   └── client.test.js  # 客户端模块、注入与国际化契约测试
+│   ├── client.test.js  # 客户端模块、注入与国际化契约测试
+│   └── client-render.test.js # 余额页状态、刷新、取消与翻译行为测试
 ├── AGENTS.md           # 代码代理约束
 └── README.md           # 安装、使用与详细文档入口
 ```

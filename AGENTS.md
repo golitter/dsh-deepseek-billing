@@ -38,6 +38,7 @@ lib/index.js       凭据、DeepSeek 请求、余额服务、HTTP 路由和斜�
 lib/client.js      设置页 UI、CSS、请求状态和中英文词典
 test/index.test.js 宿主服务、错误码、路由、命令和配置测试
 test/client.test.js 客户端模块、注入和国际化契约测试
+test/client-render.test.js 客户端余额页状态、刷新、取消和翻译行为测试
 docs/design/       设计文档（索引见 docs/design/README.md，覆盖实现、运行契约、设计取舍和验证清单）
 docs/image_*.png   README 使用的中英文截图
 README.md          安装、配置和使用说明
@@ -108,4 +109,4 @@ node --check lib/client.js
 node -e "JSON.parse(require('fs').readFileSync('package.json'))"
 ```
 
-`test/client.test.js` 只做客户端契约校验，不替代真实渲染。手动检查：正常余额、缺失凭据、刷新与旧请求取消、中文/英文切换、明暗主题、窄屏布局，以及 `/deepseek-billing` 的菜单说明在 zh/en 间实时更新、无持久化语言回退、错误状态和带多余参数时的输出。本地链接安装可由 Web 客户端 HMR 检测；GitHub 安装需重新安装/更新并重启 DSH Web，必要时 `Ctrl+F5`。
+`test/client.test.js` 只做客户端契约校验；`test/client-render.test.js` 用轻量 hook harness 校验余额页状态转换，但两者都不替代真实浏览器渲染。手动检查：正常余额、缺失凭据、刷新与旧请求取消、中文/英文切换、明暗主题、窄屏布局，以及 `/deepseek-billing` 的菜单说明在 zh/en 间实时更新、无持久化语言回退、错误状态和带多余参数时的输出。本地链接安装可由 Web 客户端 HMR 检测；GitHub 安装需重新安装/更新并重启 DSH Web，必要时 `Ctrl+F5`。

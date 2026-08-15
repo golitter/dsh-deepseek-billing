@@ -39,14 +39,14 @@
 
 4. 打开“设置 → 计费 / Billing”查看余额；点击“刷新 / Refresh”可重新获取。
 
-   ![DeepSeek 计费插件中文界面](docs/image_zh.png)
+   ![DeepSeek 计费插件中文界面](https://raw.githubusercontent.com/golitter/dsh-deepseek-billing/main/docs/image_zh.png)
 
-   ![DeepSeek billing plugin English interface](docs/image_en.png)
+   ![DeepSeek billing plugin English interface](https://raw.githubusercontent.com/golitter/dsh-deepseek-billing/main/docs/image_en.png)
 
 5. 也可在对话中直接输入无参数命令 `/deepseek-billing` 快速查看余额；在新建空白会话中，结果显示在输入框旁的临时提示中，不会进入对话记录页，并在会话激活、1 分钟到期或切换离开时自动清除；空白阶段执行过的余额命令不会在会话激活后重新显示为历史卡片。宿主已保存 `zh`/`en` 偏好时，斜杠菜单说明、标签、空态、错误和用法提示跟随语言并在切换后更新；远程浏览器仅有进程内语言或偏好不可用时，菜单说明回退英文，结果回退为不带标签的「币种 + 金额」、固定英文用法提示及稳定错误码。
 
-   ![使用 deepseek-billing 斜杠命令查询余额](docs/deepseek_billing_command_zh.png)
+   ![使用 deepseek-billing 斜杠命令查询余额](https://raw.githubusercontent.com/golitter/dsh-deepseek-billing/main/docs/deepseek_billing_command_zh.png)
 
 ## 配置与安全
 
-详见 [配置与安全](docs/design/configuration-and-security.md)。
+详见 [配置与安全](https://github.com/golitter/dsh-deepseek-billing/blob/main/docs/design/configuration-and-security.md)。
