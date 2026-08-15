@@ -49,4 +49,4 @@
 
 ## 配置与安全
 
-详见 [配置与安全说明](docs/configuration.md)。
+详见 [配置与安全](docs/configuration-and-security.md)。

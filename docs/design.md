@@ -442,7 +442,7 @@ Web profile 挂载了客户端 HMR，会轮询当前已加载包的 `lib/client.
 │   ├── index.js        # 宿主半：服务 + 路由 + 斜杠命令 + 错误码
 │   └── client.js       # 客户端半：设置页 UI + 词典 + 命令临时提示（window.__ModuleLoader__.load）
 ├── docs/
-│   ├── configuration.md # 配置、安全边界与本地代理示例
+│   ├── configuration-and-security.md # 配置、安全边界与本地代理示例
 │   ├── design.md       # 本文档
 │   ├── image_zh.png    # 中文界面截图
 │   └── image_en.png    # 英文界面截图
