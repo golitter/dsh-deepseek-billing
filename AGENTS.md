@@ -38,7 +38,7 @@ lib/index.js       凭据、DeepSeek 请求、余额服务、HTTP 路由和斜�
 lib/client.js      设置页 UI、CSS、请求状态和中英文词典
 test/index.test.js 宿主服务、错误码、路由、命令和配置测试
 test/client.test.js 客户端模块、注入和国际化契约测试
-docs/design.md     当前实现、运行契约、设计取舍和验证清单
+docs/design/       设计文档（索引见 docs/design/README.md，覆盖实现、运行契约、设计取舍和验证清单）
 docs/image_*.png   README 使用的中英文截图
 README.md          安装、配置和使用说明
 ```

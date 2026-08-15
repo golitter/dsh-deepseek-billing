@@ -1,5 +1,7 @@
 # 配置与安全
 
+> 配置与安全的使用侧说明；完整实现约束与设计取舍见 [README.md](README.md)，安全边界详见 [security.md](security.md)。
+
 ## 配置
 
 以下配置键均可选，写在插件宿主配置中。默认配置行为不变；已有自定义 `endpoint` 的配置需要显式增加 `allowCustomEndpoint: true` 迁移。
@@ -28,4 +30,4 @@
 - 余额响应体受 64 KiB 硬上限约束，余额字段受长度上限约束；服务端日志只记录稳定错误码，不含密钥、`Authorization` 头、上游正文或 endpoint query。
 - 所有失败响应统一为 `{ ok: false, code }`，`code` 取固定错误码，客户端按当前语言翻译。
 
-更完整的实现约束和设计取舍见 [设计文档](design.md)。
+更完整的实现约束和设计取舍见 [设计文档索引](README.md)。
