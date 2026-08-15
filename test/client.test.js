@@ -29,14 +29,24 @@ test('client injects required services and keeps locale keys identical', async (
     assert.equal(definition.id, 'dsh-deepseek-billing')
 
     const clientModule = definition.factory((id) => {
-      assert.equal(id, 'react')
-      return {}
+      if (id === 'react') return {
+        createElement(type, props, ...children) {
+          return { type, props, children }
+        },
+      }
+      if (id === '@deepseek-ai/dsh-client-ui-primitives') return {
+        DisclosureRow: 'DisclosureRow',
+        IconApiOutline14: 'IconApiOutline14',
+        StateDot: 'StateDot',
+      }
+      assert.fail(`unexpected client dependency: ${id}`)
     })
     assert.deepEqual(clientModule.inject, ['slots', 'locale', 'sessions'])
 
     let namespace
     let dictionaries
-    let slot
+    let settingsSlot
+    let commandSlot
     let commandExecuted
     const notices = []
     const listListeners = new Set()
@@ -136,11 +146,12 @@ test('client injects required services and keeps locale keys identical', async (
       },
       slots: {
         inject(name, register) {
-          assert.equal(name, 'settings.section')
+          assert.ok(name === 'settings.section' || name === 'conversation.chat.commandview')
           return register()
         },
         register(config, component) {
-          slot = { config, component }
+          if (config.name === 'settings.section') settingsSlot = { config, component }
+          if (config.name === 'conversation.chat.commandview') commandSlot = { config, component }
           return () => {}
         },
       },
@@ -150,8 +161,22 @@ test('client injects required services and keeps locale keys identical', async (
 
     assert.equal(namespace, 'settings.billing')
     assert.deepEqual(Object.keys(dictionaries.zh).sort(), Object.keys(dictionaries.en).sort())
-    assert.equal(slot.config.label(), 'nav')
-    assert.equal(typeof slot.component, 'function')
+    assert.equal(settingsSlot.config.label(), 'nav')
+    assert.equal(typeof settingsSlot.component, 'function')
+    assert.equal(commandSlot.config.key, 'deepseek-billing')
+    assert.equal(typeof commandSlot.component, 'function')
+
+    const blankCommand = { kind: 'command', seq: 1, name: 'deepseek-billing', outcome: { kind: 'success', text: 'CNY 16.70' } }
+    const userMessage = { kind: 'user-message', seq: 3 }
+    const afterActivation = { kind: 'command', seq: 4, name: 'deepseek-billing', outcome: { kind: 'success', text: 'CNY 16.66' } }
+    const useSession = (selector) => selector({ nodes: [blankCommand, userMessage, afterActivation] })
+    const commandOnlyTransition = (selector) => selector({ nodes: [blankCommand] })
+    assert.equal(commandSlot.component({ node: blankCommand, useSession: commandOnlyTransition }), null)
+    assert.equal(commandSlot.component({ node: blankCommand, useSession }), null)
+    const visibleCommand = commandSlot.component({ node: afterActivation, useSession })
+    assert.equal(visibleCommand.type, 'DisclosureRow')
+    assert.equal(visibleCommand.props.icon.type, 'IconApiOutline14')
+    assert.equal(visibleCommand.props.collapsedContent.at(-1).children[0], 'CNY 16.66')
 
     commandExecuted('session-1', 'goal', { kind: 'success', text: 'ignored' })
     commandExecuted('session-1', 'deepseek-billing', { kind: 'success' })

@@ -13,7 +13,7 @@ window.__ModuleLoader__.load({
 });
 ```
 
-`require('react')` 复用宿主已加载的 React（`peerDependencies` 声明 `react`）。注入 `slots`（注册设置区块）、`locale`（词典 + 实时翻译）与 `sessions`（按本地命令回执定位对应会话的输入提示出口）。
+`require('react')` 复用宿主已加载的 React（`peerDependencies` 声明 `react`）；命令结果行复用 `@deepseek-ai/dsh-client-ui-primitives` 的 `DisclosureRow`、`IconApiOutline14` 与 `StateDot`，保持 DSH 默认命令卡的图标、字号、颜色和间距。注入 `slots`（注册设置区块）、`locale`（词典 + 实时翻译）与 `sessions`（按本地命令回执定位对应会话的输入提示出口）。
 
 ### 6.2 空白会话中的命令提示
 
@@ -24,6 +24,8 @@ DSH 把纯通用 `command` 节点视为控制面内容，因此仅有命令事�
 - 成功文本调用 `notify('info', text)`，错误文本调用 `notify('error', text)`；
 - notice 在会话从 blank 激活或 60 秒到期时自动清除；离开会话时也只清除插件自己发布且尚未被覆盖的精确 notice，导航后才返回的旧回执直接丢弃；
 - 提示使用 DSH 原有输入框 notice UI，不激活会话、不复制余额请求，也不影响其他浏览器标签页。
+
+宿主命令的 `command/run` / `command/done` 仍由 DSH 持久化。为防止空白阶段执行过的余额命令在会话激活后突然显示，插件为 `conversation.chat.commandview` 注册 `deepseek-billing` 专用渲染：命令独占快照的 blank → active 过渡帧直接返回 `null`；首个非 `command` 节点出现后，再比较 `seq`，更早的命令继续隐藏，之后执行的命令正常显示结果。该处理避免激活瞬间闪现，只改变本插件命令的客户端呈现，不修改或删除会话日志。
 
 ### 6.3 组件状态机
 

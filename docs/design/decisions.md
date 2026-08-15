@@ -15,4 +15,4 @@
 9. **endpoint 收紧为「默认锁定官方地址」**：`allowCustomEndpoint: false`（默认）时 `endpoint` 必须等于官方 DeepSeek HTTPS 地址；设 `true` 才允许自定义（任意 `https:` 或 loopback 明文 HTTP 代理）。用户名/密码/fragment、非 `http(s):` 协议一律拒绝，`redirect: 'manual'` 保证跨域重定向不会把 `Authorization` 带到新目标。
 10. **并发合并 + 低频限流**：同一时刻多个 `getBalance()` 只共享一次上游请求；路由按客户端地址做每分钟固定窗口限流（默认 30 次），超限在读取凭据之前直接返回 `429`。
 11. **复刻 DSH 的 browser-trust fence 并锁定 loopback**：`exact` 路由在 webserver 匹配中优先于 `/api` 前缀路由，会绕过连接层自带的 fence，因此路由在入口自行复刻同一道「Host loopback + 同源」判定并返回 `403 { ok:false, code }`。余额读取 API Key、发起上游、返回账户数据，属于高权限操作，故用空信任列表锁定 loopback，与 DSH `credentials`/`settings` 平面一致，`--trusted-host`（DNS-rebinding 白名单，非鉴权）不放开它。
-12. **空白会话使用临时命令提示**：不修改 DSH，也不把余额查询复制到客户端。插件只监听当前浏览器的 `command/executed` 回执，将自身命令文本送到当前空白会话的 composer notice；提示在会话激活、60 秒到期或离开会话时清除，导航后才返回的旧回执不再展示。Hero 和其他命令的持久化语义不受影响。
+12. **空白会话使用临时命令提示**：不修改 DSH，也不把余额查询复制到客户端。插件只监听当前浏览器的 `command/executed` 回执，将自身命令文本送到当前空白会话的 composer notice；提示在会话激活、60 秒到期或离开会话时清除，导航后才返回的旧回执不再展示。DSH 仍照常持久化命令生命周期，但插件的命令行插槽隐藏首个普通内容之前的 `deepseek-billing` 节点，避免空白查询在会话激活后成批出现；已激活后执行的命令仍正常显示。

@@ -9,7 +9,7 @@
 | [overview.md](overview.md) | 概述、设计目标与非目标、整体架构与三条数据流 |
 | [packaging.md](packaging.md) | 打包与分发模型：双端包声明、bundle patch、clientModules 发现、三类 inject |
 | [host.md](host.md) | 宿主端设计（lib/index.js）：常量与错误码、余额服务、数据模型、HTTP 路由、斜杠命令 |
-| [client.md](client.md) | 客户端设计（lib/client.js）：模块外壳、命令临时提示、状态机、请求生命周期、样式 |
+| [client.md](client.md) | 客户端设计（lib/client.js）：模块外壳、命令临时提示、命令行插槽（空白阶段命令隐藏）、状态机、请求生命周期、样式 |
 | [i18n.md](i18n.md) | 国际化设计：locale 接入、词典键集、实时切换、时间格式 |
 | [decisions.md](decisions.md) | 关键决策与权衡（12 条） |
 | [security.md](security.md) | 安全与隐私：凭据、访问控制边界、日志脱敏 |

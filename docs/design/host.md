@@ -17,6 +17,7 @@ const DEFAULT_MAX_REQUESTS_PER_MINUTE = 30
 const MAX_RESPONSE_BYTES = 64 * 1024
 const CURRENCY_MAX_LENGTH = 16
 const AMOUNT_MAX_LENGTH = 128
+const DEFAULT_COMMAND_DESCRIPTION = 'show the DeepSeek account balance'
 ```
 
 宿主配置键（均可选；默认配置行为不变，已有自定义 `endpoint` 需显式增加 `allowCustomEndpoint: true` 迁移）：
@@ -101,6 +102,7 @@ handler 复用 `deepseekBilling.getBalance()`；主标签、空态和固定错�
 | 发现菜单说明（en / 无偏好） | `show the DeepSeek account balance` |
 | 成功且有余额（zh） | `{ kind: 'success', text: '可用余额 CNY 12.34' }` |
 | 成功且有余额（en） | `{ kind: 'success', text: 'Available balance CNY 12.34' }` |
+| 成功且有余额（无偏好） | `{ kind: 'success', text: 'CNY 12.34' }` |
 | 成功但无余额（zh） | `{ kind: 'success', text: '暂无余额信息' }` |
 | 成功但无余额（无偏好） | `{ kind: 'success', text: '—' }` |
 | 失败（zh/en） | `{ kind: 'error', text: '<本地化错误文案>' }` |
