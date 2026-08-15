@@ -1,104 +1,49 @@
 # AGENTS.md
 
-本文件约束本仓库中的代码代理。默认使用中文沟通，优先做最小、可验证的修改。
+## 项目简介
 
-## 项目
+`dsh-deepseek-billing` 是 DeepSeek Harness（DSH）双端插件：宿主读取 DeepSeek API 余额并提供 `/deepseek-billing` 命令，客户端在“设置 → 计费 / Billing”展示余额，支持中英文实时切换。默认使用中文沟通，优先做最小、可验证的修改。
 
-`dsh-deepseek-billing` 是 DSH 双端插件：宿主读取 DeepSeek API 余额并提供 `/deepseek-billing` 斜杠命令，客户端在“设置 → 计费 / Billing”展示余额，并随 DSH 在中英文间实时切换。
-
-## 架构
-
-```mermaid
-flowchart LR
-    UI["lib/client.js<br/>设置页 UI"]
-    API["lib/index.js<br/>本地 JSON 路由"]
-    SVC["deepseekBilling<br/>余额服务"]
-    KEY["credentials<br/>DEEPSEEK_API_KEY"]
-    DS["DeepSeek<br/>/user/balance"]
-    LOC["DSH locale<br/>zh / en"]
-    PREF["settings<br/>locale.preference"]
-    CMD["commands<br/>/deepseek-billing"]
-    UI -->|"GET /api/deepseek-billing/balance"| API
-    API --> SVC
-    SVC --> KEY
-    SVC --> DS
-    DS --> SVC --> API --> UI
-    LOC --> UI
-    LOC --> PREF
-    PREF --> CMD
-    CMD --> SVC
-```
-
-## 文件
+## 目录结构
 
 ```text
-package.json       DSH bundle/client 声明与包入口
-cordis.patch.yml   按包名插入宿主插件
-lib/index.js       凭据、DeepSeek 请求、余额服务、HTTP 路由和斜杠命令
-lib/client.js      设置页 UI、CSS、请求状态和中英文词典
-test/index.test.js 宿主服务、错误码、路由、命令和配置测试
-test/client.test.js 客户端模块、注入和国际化契约测试
-test/client-render.test.js 客户端余额页状态、刷新、取消和翻译行为测试
-docs/design/       设计文档（索引见 docs/design/README.md，覆盖实现、运行契约、设计取舍和验证清单）
-docs/image_*.png   README 使用的中英文截图
-README.md          安装、配置和使用说明
+dsh-deepseek-billing/
+├── lib/
+│   ├── index.js              # 宿主：凭据、余额服务、HTTP 路由、斜杠命令
+│   └── client.js             # 客户端：设置页、命令提示、样式和词典
+├── test/
+│   ├── index.test.js         # 宿主服务、路由、命令和配置测试
+│   ├── client.test.js        # 客户端模块与契约测试
+│   └── client-render.test.js # 余额页状态、刷新、取消和翻译测试
+├── docs/design/              # 设计文档，入口见 docs/design/README.md
+├── docs/*.png                # README 截图，不进入发布包
+├── package.json              # DSH bundle/client 声明与包入口
+├── cordis.patch.yml          # 宿主插件插入配置
+└── README.md                 # 安装、配置和使用说明
 ```
 
-真实入口只有 `lib/index.js` 和 `lib/client.js`。不要手动建符号链接或写死本机路径。
+真实入口只有 `lib/index.js` 和 `lib/client.js`，不要创建符号链接或写死本机路径。详细实现、运行契约和手动验证清单查阅 `docs/design/README.md`。
 
-## 宿主端规则
+## 核心规则
 
-- API Key 只能通过 `ctx.credentials.resolve('DEEPSEEK_API_KEY')` 获取。
-- 不得把 API Key 写入代码、日志、响应、文档、截图或测试数据。
-- 凭据值必须先 `trim()`；缺失、非字符串或全空白统一报 `missing_credential`。
-- 保留请求超时、取消、HTTP 状态、JSON 和 `balance_infos` 校验。
-- `balance_infos[0]` 为空时返回 `null`；非空时必须校验 `currency`、`total_balance`、`granted_balance`、`topped_up_balance` 为非空字符串，并只返回这四个白名单字段。
-- 不在插件启动时主动查询余额。
-- 本地路由仅允许 `GET`，保留 `Cache-Control: no-store`。
-- HTTP 失败响应统一使用 `{ ok: false, code }`；`code` 只能取下方固定值，缺失或未知码兜底为 `billing_service_unavailable`，不得返回堆栈、内部路径和上游正文。
-- `config.endpoint` 会接收 Bearer 凭据，只能视为受信任的宿主配置；改变、移除或收紧该配置前按公开接口变更处理。
-- 保留 `commands` 注入和 `/deepseek-billing` 命令；命令必须复用 `deepseekBilling.getBalance()`，不得另建凭据或请求链路。
-- 命令可见文本只读取宿主 `settings` 中的 `locale.preference`；zh/en 下本地化发现菜单说明、主标签、空态、固定错误码和用法提示，服务读取失败、偏好缺失或未知时返回英文菜单说明、语言中性余额文本、固定英文用法提示或稳定错误码，不得因此让余额查询失败。
-- 监听 `settings/updated` 的 `locale` 变化；菜单说明发生变化时先注销再重新注册命令，依靠 `commands/change` 让已打开的客户端目录重新拉取。插件卸载时必须同时清理监听器和当前命令注册。
-- `/deepseek-billing` 不接受参数；handler 必须检查 `invocation.rawInput`，多余输入返回本地化用法错误。
-
-错误码固定为：
-
-```text
-missing_credential
-balance_timeout
-balance_fetch_failed
-billing_service_unavailable
-invalid_response
-```
-
-新增错误码时同步更新 `ERROR_CODES`、`ERROR_KEY`、客户端中英文词典、宿主 `COMMAND_MESSAGES`、测试、设计文档和 README。
-
-## 客户端规则
-
-- 保留 `window.__ModuleLoader__.load(...)` 模块外壳和 `require('react')`。
-- `exports.inject` 必须覆盖实际使用的 `slots`、`locale` 服务。
-- 新请求前及组件卸载时取消旧请求，防止过期结果覆盖新状态。
-- CSS 使用 `ds-billing-` 前缀；颜色跟随宿主 `currentColor`。
-- UI 保持简洁：总余额为主，充值与赠送余额为次，不添加虚构图表或指标。
-- 保留窄屏适配、焦点样式、禁用状态和 ARIA 文案。
-
-## 国际化
-
-- 命名空间固定为 `settings.billing`。
-- `zh`、`en` 必须键完全一致；所有可见文案使用 `t(key)`。
-- 侧边栏使用 `label: () => t('nav')`，不能写死语言。
-- 使用 `React.useSyncExternalStore` 订阅 `ctx.locale`，切换语言后立即更新。
-- HTTP 路由只返回错误码，翻译由客户端完成；宿主斜杠命令直接返回面向用户的本地化文本。
+- API Key 只能通过 `ctx.credentials.resolve('DEEPSEEK_API_KEY')` 获取并先 `trim()`；不得写入代码、日志、响应、文档、截图或测试数据。
+- 保留请求超时/取消、HTTP/JSON/响应大小校验；余额为空返回 `null`，否则只返回 `currency`、`total_balance`、`granted_balance`、`topped_up_balance` 四个非空字符串字段。
+- 不在启动时查询余额；本地路由只允许 `GET` 并保留 `Cache-Control: no-store` 和 browser-trust fence。
+- 固定错误码为 `missing_credential`、`balance_timeout`、`balance_fetch_failed`、`billing_service_unavailable`、`invalid_response`；未知错误统一回退 `billing_service_unavailable`，不得暴露堆栈、路径或上游正文。
+- `config.endpoint` 会收到 Bearer 凭据，属于受信任的宿主配置；变更其行为按公开接口变更处理。
+- `/deepseek-billing` 必须复用 `deepseekBilling.getBalance()`、拒绝多余参数，并按宿主 `settings` 中的 `locale.preference` 本地化；语言不可用时使用稳定的英文/中性回退。
+- 语言更新时重新注册命令；卸载时清理命令、监听器、请求、定时器和订阅。
+- 客户端保留 `window.__ModuleLoader__.load(...)`、`require('react')` 及实际使用的 `slots`、`locale`、`sessions` 注入。
+- 新请求和组件卸载前取消旧请求，禁止过期结果覆盖新状态；UI 只展示总余额、充值余额和赠送余额。
+- 命名空间固定为 `settings.billing`；zh/en 键完全一致，所有可见文案使用 `t(key)`，侧栏使用 `label: () => t('nav')`，并通过 `useSyncExternalStore` 响应语言切换。
+- CSS 使用 `ds-billing-` 命名，颜色跟随 `currentColor`；保留窄屏、焦点、禁用状态和 ARIA 支持。
 
 ## 修改与验证
 
-- 保留用户已有改动，不处理无关文件。
-- 标识符保持一致：包名、客户端模块 ID 与 patch `name` 为 `dsh-deepseek-billing`；宿主插件 `name` 与 patch `id` 为 `deepseek-billing`。
-- 改变安装方式、公开接口、包名或删除文件前先征得用户同意。
-- UI、安装方式、错误码或配置变化时同步更新 README；UI 变化时更新 `docs/` 截图。
-- 宿主逻辑变化时同步更新 `test/index.test.js`；模块外壳、注入或词典变化时同步更新 `test/client.test.js`。
-- 测试使用 Node.js 内置 `node:test`，不得依赖真实 DSH、真实 DeepSeek 请求或真实 API Key；替换 `globalThis.fetch`、`window`、`console.error` 等全局对象时必须在 `finally` 中恢复。
+- 保留用户已有改动，不处理无关文件；改变安装方式、公开接口、包名或删除文件前先征得同意。
+- 标识符保持一致：包名、客户端模块 ID、patch `name` 为 `dsh-deepseek-billing`；宿主插件 `name`、patch `id` 为 `deepseek-billing`。
+- UI、安装、错误码或配置变化时同步 README；UI 变化时更新截图；宿主/客户端变化同步对应测试和设计文档。
+- 测试使用 Node.js 内置 `node:test`，不得依赖真实 DSH、DeepSeek 请求或 API Key；替换全局对象必须在 `finally` 中恢复。
 
 至少运行：
 
@@ -109,4 +54,4 @@ node --check lib/client.js
 node -e "JSON.parse(require('fs').readFileSync('package.json'))"
 ```
 
-`test/client.test.js` 只做客户端契约校验；`test/client-render.test.js` 用轻量 hook harness 校验余额页状态转换，但两者都不替代真实浏览器渲染。手动检查：正常余额、缺失凭据、刷新与旧请求取消、中文/英文切换、明暗主题、窄屏布局，以及 `/deepseek-billing` 的菜单说明在 zh/en 间实时更新、无持久化语言回退、错误状态和带多余参数时的输出。本地链接安装可由 Web 客户端 HMR 检测；GitHub 安装需重新安装/更新并重启 DSH Web，必要时 `Ctrl+F5`。
+客户端测试不替代真实浏览器检查；发布或 UI 变更后仍需验证余额状态、刷新取消、语言切换、明暗主题、窄屏布局和 `/deepseek-billing` 命令生命周期。
