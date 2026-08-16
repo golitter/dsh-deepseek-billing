@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 test('client injects required services and keeps locale keys identical', async () => {
@@ -161,8 +162,12 @@ test('client injects required services and keeps locale keys identical', async (
 
     assert.equal(namespace, 'settings.billing')
     assert.deepEqual(Object.keys(dictionaries.zh).sort(), Object.keys(dictionaries.en).sort())
+    assert.equal(settingsSlot.config.id, 'deepseek-billing')
     assert.equal(settingsSlot.config.label(), 'nav')
     assert.equal(typeof settingsSlot.component, 'function')
+    const source = await readFile(new URL('../lib/client.js', import.meta.url), 'utf8')
+    assert.match(source, /\.ds-billing \.ds-billing-header/)
+    assert.doesNotMatch(source, /(?:^|\n)\s*\.ds-billing-[a-z-]+(?=[:\s.{])/)
     assert.equal(commandSlot.config.key, 'deepseek-billing')
     assert.equal(typeof commandSlot.component, 'function')
 

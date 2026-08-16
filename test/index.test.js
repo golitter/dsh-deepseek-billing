@@ -9,6 +9,7 @@ function createContext(credential = { value: 'fixture-credential' }, config = {}
   let command
   let settingsListener
   let currentLocalePreference = localePreference
+  const effects = []
 
   const settings = currentLocalePreference === null
     ? undefined
@@ -53,7 +54,9 @@ function createContext(credential = { value: 'fixture-credential' }, config = {}
       }
     },
     effect(register) {
-      return register()
+      const dispose = register()
+      if (typeof dispose === 'function') effects.push(dispose)
+      return dispose
     },
   }
 
@@ -63,6 +66,9 @@ function createContext(credential = { value: 'fixture-credential' }, config = {}
     handler,
     command,
     getCommand: () => command,
+    async dispose() {
+      for (const effect of effects.splice(0).reverse()) await effect()
+    },
     updateLocalePreference(next) {
       currentLocalePreference = next
       settingsListener?.('locale', { preference: next }, {}, 'update')
@@ -495,6 +501,32 @@ test('coalesces concurrent getBalance calls into one upstream request', async ()
     assert.equal(fetchCalls, 1)
     assert.equal(results.length, 3)
     for (const result of results) assert.equal(result.currency, 'CNY')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('aborts an in-flight upstream request when the plugin unloads', async () => {
+  const originalFetch = globalThis.fetch
+  let capturedSignal
+  globalThis.fetch = async (_url, options) => {
+    capturedSignal = options.signal
+    return new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => {
+        const error = new Error('aborted')
+        error.name = 'AbortError'
+        reject(error)
+      }, { once: true })
+    })
+  }
+  try {
+    const context = createContext(undefined, { timeoutMs: 60_000 })
+    const pending = context.service.getBalance()
+    await new Promise((resolve) => setImmediate(resolve))
+    assert.equal(capturedSignal.aborted, false)
+    await context.dispose()
+    assert.equal(capturedSignal.aborted, true)
+    await assert.rejects(pending, { code: 'balance_timeout' })
   } finally {
     globalThis.fetch = originalFetch
   }

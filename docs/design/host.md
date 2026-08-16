@@ -57,7 +57,7 @@ const DEFAULT_COMMAND_DESCRIPTION = 'show the DeepSeek account balance'
 7. 取 `balance_infos[0]`：`undefined` 返回 `null`；非普通对象，或四个必要字段缺失、为空、不是字符串 → `invalid_response`；`currency` 超过 16 字符、任一金额超过 128 字符 → `invalid_response`。
 8. 构造只包含 `currency`、`total_balance`、`granted_balance`、`topped_up_balance` 的新对象返回，避免把上游未来新增的字段自动暴露给浏览器。
 
-并发调用会被合并：同一时刻多个 `getBalance()` 只共享一次上游请求，共享的 promise 在 settle 后清空。启动时不调用 `getBalance()`，只在请求到达时执行。
+并发调用会被合并：同一时刻多个 `getBalance()` 只共享一次上游请求，共享的 promise 在 settle 后清空。每个活跃请求的 `AbortController` 都由插件 fiber 跟踪，卸载或 HMR 重载时立即取消，避免旧实例在新实例启动后继续携带凭据请求上游。启动时不调用 `getBalance()`，只在请求到达时执行。
 
 ### 5.3 余额数据模型
 

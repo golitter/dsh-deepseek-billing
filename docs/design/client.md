@@ -15,6 +15,8 @@ window.__ModuleLoader__.load({
 
 `require('react')` 复用宿主已加载的 React（`peerDependencies` 声明 `react`）；命令结果行复用 `@deepseek-ai/dsh-client-ui-primitives` 的 `DisclosureRow`、`IconApiOutline14` 与 `StateDot`，保持 DSH 默认命令卡的图标、字号、颜色和间距。注入 `slots`（注册设置区块）、`locale`（词典 + 实时翻译）与 `sessions`（按本地命令回执定位对应会话的输入提示出口）。
 
+设置区块使用插件专属 ID `deepseek-billing`，避免与其他计费插件常用的通用 `billing` ID 冲突。
+
 ### 6.2 空白会话中的命令提示
 
 DSH 把纯通用 `command` 节点视为控制面内容，因此仅有命令事件的新会话会留在 Hero，持久命令卡不会挂载。插件监听本地客户端执行确认事件 `command/executed`：
@@ -69,7 +71,7 @@ invalid_response             -> error.invalid_response
 
 ### 6.6 样式
 
-- CSS 类名统一 `ds-billing-` 前缀。
+- CSS 类名统一 `ds-billing-` 前缀，子选择器同时限定在 `.ds-billing` 根节点内，避免样式命中其他插件。
 - 颜色全部用 `currentColor` + `color-mix(in srgb, currentColor X%, transparent)`，自动适配明暗主题。
 - `@media (max-width: 620px)` 下 header 纵向堆叠、breakdown 改纵向。
 - 保留 `:focus-visible` 焦点环、`:disabled` 状态、`role="status"/"alert"` 与 `aria-label`。
