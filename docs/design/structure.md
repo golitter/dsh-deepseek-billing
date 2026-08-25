@@ -30,7 +30,8 @@
 │       ├── configuration-and-security.md
 │       ├── verification.md
 │       ├── limitations.md
-│       └── structure.md
+│       ├── structure.md
+│       └── upgrade-dsh-0.1.1-rc.2.md # DSH 0.1.1-rc.2 适配实施方案与验收记录
 ├── test/
 │   ├── index.test.js   # 宿主端服务、错误码、路由、命令与配置测试（30 cases）
 │   ├── client.test.js  # 客户端模块、注入、国际化、命令行插槽与会话提示（3 cases）

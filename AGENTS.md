@@ -14,7 +14,8 @@ dsh-deepseek-billing/
 ├── test/
 │   ├── index.test.js         # 宿主服务、路由、命令和配置测试
 │   ├── client.test.js        # 客户端模块与契约测试
-│   └── client-render.test.js # 余额页状态、刷新、取消和翻译测试
+│   ├── client-render.test.js # 余额页状态、刷新、取消、超时和翻译测试
+│   └── package.test.js       # 发布元数据与发布文件边界契约测试
 ├── docs/design/              # 设计文档，入口见 docs/design/README.md
 ├── docs/README.en.md         # 英文 README
 ├── docs/*.png                # README 截图，不进入发布包
