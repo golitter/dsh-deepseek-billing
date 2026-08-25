@@ -47,4 +47,6 @@ DSH 的 `clientModules` 服务（Node 半）扫描宿主 Loader 里声明了 `ds
 
 `package.json` 版本为 `0.1.1`，Node.js 基线与目标 DSH 一致：`^22.19.0 || >=24.0.0`。所有 `@deepseek-ai/dsh-*` peer 均声明为 `>=0.1.1-rc.2 <0.1.2`，接受同一 `0.1.1` 版本线上的后续 RC 和正式版，但不宣称兼容未经复核的后续版本线。
 
+发布元数据固定指向本仓库：`repository.url` 为 `git+https://github.com/golitter/dsh-deepseek-billing.git`，`homepage` 指向 README，`bugs.url` 指向 GitHub Issues；`test/package.test.js` 会锁定这些值，避免 npm 页面脱离实际维护入口。
+
 宿主端实际注入的 `@deepseek-ai/dsh-credentials`、`@deepseek-ai/dsh-host-webserver` 和 `@deepseek-ai/dsh-commands` 是普通 peer；`@deepseek-ai/dsh-settings` 只通过 `ctx.get('settings')` 可选读取，因此标记为 optional peer。客户端的六项 `dsh.client.inject` 保持不变，不额外加入 `@deepseek-ai/dsh-client-ui-slots`：`slots` 服务由 `dsh-client-runtime` 提供，插件没有直接 `require()` 该包。

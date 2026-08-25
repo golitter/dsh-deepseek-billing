@@ -7,7 +7,7 @@
 在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 Web 设置页中增加“计费 / Billing”页面，提供：
 
 - DeepSeek API 可用余额、充值余额和赠送余额展示
-- 手动刷新及加载、空数据、错误状态
+- 手动刷新及加载、空数据、错误状态；刷新失败时保留最近一次成功余额和更新时间
 - 中文、英文实时切换
 - 明暗主题与窄屏适配
 - API Key 通过 DSH 凭证库安全读取，不会发送到浏览器
@@ -44,7 +44,7 @@
    dsh --profile web
    ```
 
-4. 打开“设置 → 计费 / Billing”查看余额；点击“刷新 / Refresh”可重新获取。
+4. 打开“设置 → 计费 / Billing”查看余额；点击“刷新 / Refresh”可重新获取。首次请求失败会显示完整错误状态；已有余额后的刷新失败会保留旧余额，并在页面中显示非阻塞提示。
 
    ![DeepSeek 计费插件中文界面](https://raw.githubusercontent.com/golitter/dsh-deepseek-billing/main/docs/image_zh.png)
 
@@ -56,4 +56,4 @@
 
 ## 配置与安全
 
-详见 [配置与安全](https://github.com/golitter/dsh-deepseek-billing/blob/main/docs/design/configuration-and-security.md)。
+详见 [配置与安全](https://github.com/golitter/dsh-deepseek-billing/blob/main/docs/design/configuration-and-security.md)。其中 `timeoutMs` 必须为大于 `0` 且不超过 `120000` 毫秒的有限数值，避免 Node.js 定时器溢出。

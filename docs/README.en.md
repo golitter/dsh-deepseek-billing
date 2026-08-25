@@ -7,7 +7,7 @@
 Adds a “Billing” page to the Web settings of [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), providing:
 
 - DeepSeek API available, topped-up, and granted balance display
-- Manual refresh plus loading, empty, and error states
+- Manual refresh plus loading, empty, and error states; a refresh failure keeps the last successful balance and timestamp
 - Live switching between Chinese and English
 - Light/dark theme and narrow-screen support
 - Secure API Key access through the DSH credential store; the key is never sent to the browser
@@ -44,7 +44,7 @@ The feature set is intentionally focused. The Host securely reads the credential
    dsh --profile web
    ```
 
-4. Open “Settings → Billing” to view the balance. Click “Refresh” to fetch it again.
+4. Open “Settings → Billing” to view the balance. Click “Refresh” to fetch it again. An initial failure shows the full error state; after a successful load, a failed refresh keeps the old balance and shows a non-blocking notice.
 
    ![DeepSeek billing plugin Chinese interface](https://raw.githubusercontent.com/golitter/dsh-deepseek-billing/main/docs/image_zh.png)
 
@@ -56,4 +56,4 @@ The feature set is intentionally focused. The Host securely reads the credential
 
 ## Configuration and Security
 
-See [Configuration and Security](https://github.com/golitter/dsh-deepseek-billing/blob/main/docs/design/configuration-and-security.md).
+See [Configuration and Security](https://github.com/golitter/dsh-deepseek-billing/blob/main/docs/design/configuration-and-security.md). `timeoutMs` must be a finite number greater than `0` and no more than `120000` milliseconds, preventing Node.js timer overflow.

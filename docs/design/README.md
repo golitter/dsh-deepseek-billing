@@ -18,5 +18,6 @@
 | [limitations.md](limitations.md) | 已知限制与后续方向 |
 | [structure.md](structure.md) | 项目目录结构 |
 | [upgrade-dsh-0.1.1-rc.2.md](upgrade-dsh-0.1.1-rc.2.md) | DSH `0.1.1-rc.2` 适配实施方案：依赖、凭据格式、安全文档、测试与真实装配验收 |
+| [improvement-plan.md](improvement-plan.md) | 后续质量改进规划：运行边界、CI、客户端失败体验、浏览器验证与发布维护 |
 
 建议阅读顺序：`overview.md` → `packaging.md` → `host.md` → `client.md` → `i18n.md` → `decisions.md` → `security.md` → `verification.md` → `limitations.md`；配置与安全（`configuration-and-security.md`）可随时查阅。

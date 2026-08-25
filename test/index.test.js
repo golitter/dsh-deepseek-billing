@@ -419,8 +419,14 @@ test('slash command localizes stable errors and keeps a neutral fallback', async
 })
 
 test('validates timeout configuration and forwards endpoint configuration', async () => {
+  assert.doesNotThrow(() => createContext())
   assert.throws(() => createContext(undefined, { timeoutMs: 0 }), TypeError)
+  assert.throws(() => createContext(undefined, { timeoutMs: -1 }), TypeError)
   assert.throws(() => createContext(undefined, { timeoutMs: Number.NaN }), TypeError)
+  assert.throws(() => createContext(undefined, { timeoutMs: Number.POSITIVE_INFINITY }), TypeError)
+  assert.throws(() => createContext(undefined, { timeoutMs: 120_001 }), TypeError)
+  assert.doesNotThrow(() => createContext(undefined, { timeoutMs: 120_000 }))
+  assert.doesNotThrow(() => createContext(undefined, { timeoutMs: 0.5 }))
 
   const originalFetch = globalThis.fetch
   let requestedUrl

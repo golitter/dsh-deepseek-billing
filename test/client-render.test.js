@@ -19,6 +19,11 @@ function createHookHarness() {
       cursor += 1
       return getSnapshot()
     },
+    useId() {
+      const index = cursor++
+      if (!(index in hooks)) hooks[index] = `«r${index}»`
+      return hooks[index]
+    },
     useState(initial) {
       const index = cursor++
       if (!(index in hooks)) hooks[index] = typeof initial === 'function' ? initial() : initial
@@ -100,9 +105,17 @@ const response = (status, body) => ({
   json: async () => body,
 })
 
+const invalidJsonResponse = (status = 200) => ({
+  ok: status >= 200 && status < 300,
+  status,
+  json: async () => { throw new SyntaxError('invalid JSON') },
+})
+
 const flush = () => new Promise((resolve) => setImmediate(resolve))
 
-test('billing section renders refresh, cancellation, localized success and errors', async () => {
+let renderFixtureSequence = 0
+
+async function createRenderFixture() {
   const previousWindow = globalThis.window
   const previousFetch = globalThis.fetch
   const harness = createHookHarness()
@@ -121,110 +134,231 @@ test('billing section renders refresh, cancellation, localized success and error
     },
   }
 
-  try {
-    await import('../lib/client.js?client-render-test')
-    const clientModule = definition.factory((id) => {
-      if (id === 'react') return harness.React
-      if (id === '@deepseek-ai/dsh-client-ui-primitives') {
-        return { DisclosureRow: 'DisclosureRow', IconApiOutline14: 'IconApiOutline14', StateDot: 'StateDot' }
-      }
-      assert.fail(`unexpected client dependency: ${id}`)
-    })
+  await import(`../lib/client.js?client-render-test-${++renderFixtureSequence}`)
+  const clientModule = definition.factory((id) => {
+    if (id === 'react') return harness.React
+    if (id === '@deepseek-ai/dsh-client-ui-primitives') {
+      return { DisclosureRow: 'DisclosureRow', IconApiOutline14: 'IconApiOutline14', StateDot: 'StateDot' }
+    }
+    assert.fail(`unexpected client dependency: ${id}`)
+  })
 
-    const ctx = {
-      effect(register) {
-        return register()
-      },
-      on() {
+  const ctx = {
+    effect(register) {
+      return register()
+    },
+    on() {
+      return () => {}
+    },
+    locale: {
+      register(_namespace, value) {
+        dictionaries = value
         return () => {}
       },
-      locale: {
-        register(_namespace, value) {
-          dictionaries = value
-          return () => {}
-        },
-        bind() {
-          return (key, params) => {
-            const template = dictionaries[activeLocale][key] ?? key
-            return template.replace(/\{(\w+)\}/g, (match, name) => name in (params ?? {}) ? String(params[name]) : match)
-          }
-        },
-        subscribe() {
-          return () => {}
-        },
-        getSnapshot() {
-          return { active: activeLocale }
-        },
+      bind() {
+        return (key, params) => {
+          const template = dictionaries[activeLocale][key] ?? key
+          return template.replace(/\{(\w+)\}/g, (match, name) => name in (params ?? {}) ? String(params[name]) : match)
+        }
       },
-      sessions: {
-        list: {
-          getSnapshot: () => ({ current: undefined }),
-          subscribe: () => () => {},
-        },
+      subscribe() {
+        return () => {}
       },
-      slots: {
-        inject(_name, register) {
-          return register()
-        },
-        register(config, component) {
-          if (config.name === 'settings.section') BillingSection = component
-          return () => {}
-        },
+      getSnapshot() {
+        return { active: activeLocale }
       },
-    }
+    },
+    sessions: {
+      list: {
+        getSnapshot: () => ({ current: undefined }),
+        subscribe: () => () => {},
+      },
+    },
+    slots: {
+      inject(_name, register) {
+        return register()
+      },
+      register(config, component) {
+        if (config.name === 'settings.section') BillingSection = component
+        return () => {}
+      },
+    },
+  }
 
-    clientModule.apply(ctx)
+  clientModule.apply(ctx)
+  return {
+    harness,
+    pending,
+    BillingSection,
+    render: () => harness.render(BillingSection),
+    setLocale(next) {
+      activeLocale = next
+    },
+    cleanup() {
+      harness.cleanup()
+      globalThis.fetch = previousFetch
+      if (previousWindow === undefined) delete globalThis.window
+      else globalThis.window = previousWindow
+    },
+  }
+}
 
-    let tree = harness.render(BillingSection)
+function bodyNode(tree) {
+  return findElement(tree, (node) => node.type === 'div' && node.props.className === 'ds-billing-body')
+}
+
+function liveRegion(tree) {
+  return findElement(tree, (node) => node.props?.['aria-live'] === 'polite')
+}
+
+const validBalance = (total_balance = '12.34') => ({
+  ok: true,
+  balance: {
+    currency: 'CNY',
+    total_balance,
+    granted_balance: '2.34',
+    topped_up_balance: '10.00',
+  },
+})
+
+test('billing section renders loading, cancellation, validated success and ARIA state', async () => {
+  const fixture = await createRenderFixture()
+  try {
+    let tree = fixture.render()
     assert.match(textContent(tree), /正在获取余额/)
-    assert.equal(pending.calls.length, 1)
+    assert.equal(fixture.pending.calls.length, 1)
+    assert.equal(bodyNode(tree).props['aria-busy'], true)
+    assert.equal(bodyNode(tree).props['aria-labelledby'], undefined)
 
     const loadingRefresh = findElement(tree, (node) => node.type === 'button')
     loadingRefresh.props.onClick()
-    assert.equal(pending.calls[0].options.signal.aborted, true)
-    assert.equal(pending.calls.length, 2)
+    assert.equal(fixture.pending.calls[0].options.signal.aborted, true)
+    assert.equal(fixture.pending.calls.length, 2)
 
-    pending.calls[1].resolve(response(200, {
+    fixture.pending.calls[1].resolve(response(200, validBalance()))
+    await flush()
+    tree = fixture.render()
+    assert.match(textContent(tree), /可用余额/)
+    assert.match(textContent(tree), /12\.34/)
+    assert.match(textContent(tree), /充值余额/)
+    assert.match(textContent(tree), /赠送余额/)
+    const titleNode = findElement(tree, (node) => node.props?.className === 'ds-billing-title')
+    assert.equal(typeof titleNode.props.id, 'string')
+    assert.equal(tree.props['aria-labelledby'], titleNode.props.id)
+    assert.equal(bodyNode(tree).props['aria-busy'], false)
+    assert.equal(liveRegion(tree).props['aria-live'], 'polite')
+    assert.equal(findElement(tree, (node) => node.props?.role === 'alert'), undefined)
+  } finally {
+    fixture.cleanup()
+  }
+})
+
+test('billing section distinguishes empty success from malformed or unknown error responses', async () => {
+  const fixture = await createRenderFixture()
+  try {
+    let tree = fixture.render()
+    fixture.pending.calls[0].resolve(response(200, { ok: true, balance: null }))
+    await flush()
+    tree = fixture.render()
+    assert.match(textContent(tree), /暂无余额信息/)
+    assert.equal(findElement(tree, (node) => node.props?.role === 'alert'), undefined)
+
+    findElement(tree, (node) => node.type === 'button').props.onClick()
+    fixture.pending.calls[1].resolve(response(200, {
+      ok: true,
+      balance: { currency: 'CNY', total_balance: '12.34' },
+    }))
+    await flush()
+    tree = fixture.render()
+    assert.match(textContent(tree), /暂无余额信息/)
+    assert.match(textContent(tree), /刷新失败：余额接口返回异常数据/)
+    assert.doesNotMatch(textContent(tree), /12\.34/)
+
+    findElement(tree, (node) => node.type === 'button').props.onClick()
+    fixture.pending.calls[2].resolve(response(200, {
       ok: true,
       balance: {
         currency: 'CNY',
-        total_balance: '12.34',
+        total_balance: 12.34,
         granted_balance: '2.34',
         topped_up_balance: '10.00',
       },
     }))
     await flush()
-    tree = harness.render(BillingSection)
-    assert.match(textContent(tree), /可用余额/)
-    assert.match(textContent(tree), /12\.34/)
-    assert.match(textContent(tree), /充值余额/)
-    assert.match(textContent(tree), /赠送余额/)
-
-    activeLocale = 'en'
-    tree = harness.render(BillingSection)
-    assert.match(textContent(tree), /Available balance/)
-    assert.match(textContent(tree), /Topped-up balance/)
-
-    const refresh = findElement(tree, (node) => node.type === 'button')
-    refresh.props.onClick()
-    assert.equal(pending.calls.length, 3)
-    tree = harness.render(BillingSection)
-    assert.match(textContent(tree), /Refreshing/)
-    assert.match(textContent(tree), /12\.34/)
-
-    pending.calls[2].resolve(response(502, { ok: false, code: 'missing_credential' }))
-    await flush()
-    tree = harness.render(BillingSection)
-    assert.match(textContent(tree), /Unable to load balance/)
-    assert.match(textContent(tree), /API key is not configured/)
+    tree = fixture.render()
+    assert.match(textContent(tree), /刷新失败：余额接口返回异常数据/)
 
     findElement(tree, (node) => node.type === 'button').props.onClick()
-    assert.equal(pending.calls.length, 4)
-    harness.cleanup()
-    assert.equal(pending.calls[3].options.signal.aborted, true)
+    fixture.pending.calls[3].resolve(invalidJsonResponse())
+    await flush()
+    tree = fixture.render()
+    assert.match(textContent(tree), /刷新失败：余额接口返回异常数据/)
+
+    findElement(tree, (node) => node.type === 'button').props.onClick()
+    fixture.pending.calls[4].resolve(response(502, { ok: false, code: 'unknown_code' }))
+    await flush()
+    tree = fixture.render()
+    assert.match(textContent(tree), /刷新失败：获取余额失败/)
+    assert.doesNotMatch(textContent(tree), /unknown_code/)
   } finally {
-    globalThis.fetch = previousFetch
-    if (previousWindow === undefined) delete globalThis.window
-    else globalThis.window = previousWindow
+    fixture.cleanup()
+  }
+})
+
+test('refresh failure keeps the last successful balance and translates immediately', async () => {
+  const fixture = await createRenderFixture()
+  try {
+    let tree = fixture.render()
+    fixture.pending.calls[0].resolve(response(200, validBalance()))
+    await flush()
+    tree = fixture.render()
+    const firstUpdatedText = textContent(tree).match(/最后更新[^↻]+/)?.[0]
+    findElement(tree, (node) => node.type === 'button').props.onClick()
+    assert.equal(bodyNode(fixture.render()).props['aria-busy'], true)
+    assert.match(textContent(fixture.render()), /刷新中/)
+    fixture.pending.calls[1].resolve(response(502, { ok: false, code: 'missing_credential' }))
+    await flush()
+    tree = fixture.render()
+    assert.match(textContent(tree), /12\.34/)
+    assert.match(textContent(tree), /刷新失败：未配置 DeepSeek API 密钥/)
+    assert.equal(bodyNode(tree).props['aria-busy'], false)
+    assert.equal(findElement(tree, (node) => node.props?.role === 'alert'), undefined)
+    assert.equal(textContent(tree).includes(firstUpdatedText), true)
+
+    fixture.setLocale('en')
+    tree = fixture.render()
+    assert.match(textContent(tree), /Available balance/)
+    assert.match(textContent(tree), /Refresh failed: DeepSeek API key is not configured/)
+    assert.match(textContent(tree), /Last updated/)
+
+    findElement(tree, (node) => node.type === 'button').props.onClick()
+    fixture.pending.calls[2].resolve(response(200, validBalance('11.11')))
+    await flush()
+    tree = fixture.render()
+    assert.match(textContent(tree), /11\.11/)
+    assert.doesNotMatch(textContent(tree), /Refresh failed/)
+  } finally {
+    fixture.cleanup()
+  }
+})
+
+test('initial failure stays a full error state and unmount cancels the retry', async () => {
+  const fixture = await createRenderFixture()
+  try {
+    let tree = fixture.render()
+    fixture.pending.calls[0].resolve(response(502, { ok: false, code: 'missing_credential' }))
+    await flush()
+    tree = fixture.render()
+    assert.match(textContent(tree), /暂时无法获取余额/)
+    assert.match(textContent(tree), /未配置 DeepSeek API 密钥/)
+    assert.equal(findElement(tree, (node) => node.props?.role === 'alert').props.role, 'alert')
+
+    findElement(tree, (node) => node.type === 'button').props.onClick()
+    assert.equal(fixture.pending.calls.length, 2)
+    fixture.cleanup()
+    assert.equal(fixture.pending.calls[1].options.signal.aborted, true)
+  } finally {
+    // cleanup is idempotent for the lightweight harness.
+    fixture.cleanup()
   }
 })

@@ -34,16 +34,21 @@ DSH 把纯通用 `command` 节点视为控制面内容，因此仅有命令事�
 `BillingSection` 用 `useState` 维护单一状态对象：
 
 ```text
-{ loading, refreshing, result, updatedAt }
+{ loading, refreshing, result, error, updatedAt }
 ```
 
 - **初始加载**：`result === undefined` 且非刷新 → `loading: true`，显示 `t('loading')`。
-- **刷新**：已有结果时点「刷新」→ `refreshing: true`，保留旧结果继续展示。
-- **成功**：`result = { ok: true, balance }`。
-- **失败**：`result = { ok: false, code }`，渲染错误态。
-- **空**：`result.ok` 但 `balance === null` → 显示 `t('empty')`。
+- **刷新**：已有结果时点「刷新」→ `refreshing: true`，保留旧结果和 `updatedAt` 继续展示，并暂时清除上一次刷新错误。
+- **成功**：`result = { ok: true, balance }`，清除 `error` 并以新的 `updatedAt` 记录成功时间。
+- **首次失败**：`result === undefined`，`error = { code }`，渲染带 `role="alert"` 的完整错误态。
+- **刷新失败**：已有 `result` 时只更新 `error = { code }`，保留余额和最后成功时间，在同一个礼貌级 live region 中追加非阻塞提示。
+- **空**：`result.ok` 但 `balance === null` → 显示 `t('empty')`；它仍是成功结果，刷新失败时同样保留空态。
 
-### 6.4 请求生命周期与竞态防护
+客户端在进入 React 状态前还会校验本地路由响应：成功响应必须是 `{ ok: true, balance: null }`，或包含四个非空字符串字段的余额对象；非 2xx 响应只接受五个固定错误码，未知或畸形错误码回退为 `balance_fetch_failed`。畸形 2xx 响应统一为 `invalid_response`，只复制白名单字段，不把原始 JSON 交给 UI。
+
+### 6.4 无障碍状态与请求生命周期
+
+section 使用 `aria-labelledby` 指向标题（标题 id 由 `React.useId()` 生成，避免多实例冲突），内容区根据首次加载或刷新设置 `aria-busy`。加载态使用礼貌级 `role="status"`，首次失败使用 `role="alert"`；成功、空态和刷新失败共享一个 `aria-live="polite"` 区域，避免同一消息被多个 live region 重复播报。刷新按钮保留 `aria-label`、键盘焦点环和禁用语义。
 
 `requestRef` 持有当前 `AbortController`：
 
@@ -67,7 +72,7 @@ invalid_response             -> error.invalid_response
 （未知）                      -> error.generic
 ```
 
-错误态渲染：标题 `t('error.title')` + 正文 `t(errorKey)`。
+首次错误态渲染：标题 `t('error.title')` + 正文 `t(errorKey)`；已有成功结果时渲染 `t('refreshError.message', { reason: t(errorKey) })`，不清除上一次成功余额。
 
 ### 6.6 样式
 

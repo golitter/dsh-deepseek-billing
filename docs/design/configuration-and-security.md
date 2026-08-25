@@ -9,7 +9,7 @@
 | 键 | 默认值 | 说明 |
 |---|---|---|
 | `endpoint` | `https://api.deepseek.com/user/balance` | 余额接口地址。`allowCustomEndpoint: false` 时必须是官方默认值。 |
-| `timeoutMs` | `10000` | 覆盖完整请求的超时（响应头 + 响应体读取 + 解析 + 校验）。 |
+| `timeoutMs` | `10000` | 覆盖完整请求的超时（响应头 + 响应体读取 + 解析 + 校验）；必须为有限数值且满足 `0 < timeoutMs <= 120000`，允许小数毫秒。 |
 | `allowCustomEndpoint` | `false` | 必须是布尔值 `true`/`false`。`false` 时锁定官方默认 endpoint；`true` 后允许自定义 `https:`，或 loopback 明文 HTTP 代理（`http://127.0.0.1` / `http://localhost`）。 |
 | `maxRequestsPerMinute` | `30` | 每客户端每分钟的低频限流上限，超限返回 `429`。 |
 
@@ -29,5 +29,6 @@
 - DSH WebServer 当前允许绑定 `127.0.0.1` 或 `0.0.0.0`。非 loopback 部署需要由 DSH connection 层配置受信 authority；该信任列表只防御 DNS rebinding，不提供身份认证。余额路由读取 API Key、发起上游调用、返回账户数据，属高权限操作，因此复刻 DSH `/api` 的 browser-trust fence 并**独立锁定本机**：请求 `Host` 必须为 loopback、拒绝 cross-site 与跨域 `Origin`，未通过返回 `403 { ok:false, code }`。通过 LAN 或远程地址打开 Web UI 时，普通页面按部署配置工作，但“计费”页的余额请求返回 `403`，这是有意的安全限制。`--trusted-host`（DNS-rebinding 白名单，非鉴权）不放开余额。
 - 余额响应体受 64 KiB 硬上限约束，余额字段受长度上限约束；服务端日志只记录稳定错误码，不含密钥、`Authorization` 头、上游正文或 endpoint query。
 - 所有失败响应统一为 `{ ok: false, code }`，`code` 取固定错误码，客户端按当前语言翻译。
+- `timeoutMs` 超过 `120000` 毫秒、为 `0`/负数、`NaN` 或无穷大时，插件启动阶段拒绝配置；这避免超大值触发 Node.js `setTimeout()` 溢出并被意外缩短。
 
 更完整的实现约束和设计取舍见 [设计文档索引](README.md)。

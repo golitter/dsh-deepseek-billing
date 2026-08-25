@@ -6,6 +6,8 @@
 
 ```text
 .
+├── .github/
+│   └── workflows/ci.yml # Node.js 22.19.x/24.x 测试、覆盖率、语法与打包边界
 ├── package.json        # 包名、exports、dsh.bundle / dsh.client 声明、peerDependencies
 ├── cordis.patch.yml    # bundle patch：按包名插入宿主插件（id: deepseek-billing）
 ├── lib/
@@ -28,11 +30,13 @@
 │       ├── configuration-and-security.md
 │       ├── verification.md
 │       ├── limitations.md
-│       └── structure.md
+│       ├── structure.md
+│       └── improvement-plan.md
 ├── test/
-│   ├── index.test.js   # 宿主端服务、错误码、路由、命令与配置测试
-│   ├── client.test.js  # 客户端模块、注入与国际化契约测试
-│   └── client-render.test.js # 余额页状态、刷新、取消与翻译行为测试
+│   ├── index.test.js   # 宿主端服务、错误码、路由、命令与配置测试（29 cases）
+│   ├── client.test.js  # 客户端模块、注入、国际化、命令行插槽与会话提示（3 cases）
+│   ├── client-render.test.js # 余额页状态、响应校验、刷新、ARIA 与翻译行为（4 cases）
+│   └── package.test.js # 发布元数据、peer 与发布文件边界契约
 ├── AGENTS.md           # 代码代理约束
 └── README.md           # 安装、使用与详细文档入口
 ```

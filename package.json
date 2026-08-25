@@ -5,7 +5,8 @@
   "type": "module",
   "main": "./lib/index.js",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "test:coverage": "node --experimental-test-coverage --test"
   },
   "engines": {
     "node": "^22.19.0 || >=24.0.0"
@@ -54,5 +55,13 @@
       "optional": true
     }
   },
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/golitter/dsh-deepseek-billing.git"
+  },
+  "homepage": "https://github.com/golitter/dsh-deepseek-billing#readme",
+  "bugs": {
+    "url": "https://github.com/golitter/dsh-deepseek-billing/issues"
+  }
 }

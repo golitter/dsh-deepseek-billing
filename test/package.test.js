@@ -35,6 +35,14 @@ test('declares the DSH 0.1.1 package contract without expanding the publish surf
   assert.equal(packageJson.name, 'dsh-deepseek-billing')
   assert.equal(packageJson.version, '0.1.1')
   assert.equal(packageJson.engines?.node, '^22.19.0 || >=24.0.0')
+  assert.deepEqual(packageJson.repository, {
+    type: 'git',
+    url: 'git+https://github.com/golitter/dsh-deepseek-billing.git',
+  })
+  assert.equal(packageJson.homepage, 'https://github.com/golitter/dsh-deepseek-billing#readme')
+  assert.deepEqual(packageJson.bugs, {
+    url: 'https://github.com/golitter/dsh-deepseek-billing/issues',
+  })
 
   assert.match(patch, /id: deepseek-billing/)
   assert.match(patch, /name: ['"]dsh-deepseek-billing['"]\s*$/m)

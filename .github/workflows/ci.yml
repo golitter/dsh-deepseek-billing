@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Node.js ${{ matrix.node-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version:
+          - 22.19.x
+          - 24.x
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Run tests
+        run: npm test
+
+      - name: Generate native test coverage report
+        run: npm run test:coverage
+
+      - name: Check JavaScript entry points
+        run: |
+          node --check lib/index.js
+          node --check lib/client.js
+
+      - name: Parse package metadata
+        run: node -e "JSON.parse(require('fs').readFileSync('package.json'))"
+
+      - name: Check publish package boundary
+        run: npm pack --dry-run

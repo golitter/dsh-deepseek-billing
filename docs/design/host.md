@@ -13,6 +13,7 @@ export const inject = ['credentials', 'webServer', 'commands']
 const DEFAULT_ENDPOINT = 'https://api.deepseek.com/user/balance'
 const CREDENTIAL_REF = 'DEEPSEEK_API_KEY'
 const DEFAULT_TIMEOUT_MS = 10_000
+const MAX_TIMEOUT_MS = 120_000
 const DEFAULT_MAX_REQUESTS_PER_MINUTE = 30
 const MAX_RESPONSE_BYTES = 64 * 1024
 const CURRENCY_MAX_LENGTH = 16
@@ -25,11 +26,13 @@ const DEFAULT_COMMAND_DESCRIPTION = 'show the DeepSeek account balance'
 | 键 | 默认值 | 说明 |
 |---|---|---|
 | `endpoint` | `https://api.deepseek.com/user/balance` | 余额接口地址。`allowCustomEndpoint: false` 时必须是官方默认值 |
-| `timeoutMs` | `10000` | 覆盖完整请求（响应头 + 响应体读取 + 解析 + 校验）的超时 |
+| `timeoutMs` | `10000` | 覆盖完整请求（响应头 + 响应体读取 + 解析 + 校验）的超时；必须满足 `0 < timeoutMs <= 120000`，允许小数 |
 | `allowCustomEndpoint` | `false` | 必须是布尔值 `true`/`false`；`false` 时锁定官方默认 endpoint，`true` 时允许自定义 `https:`（或 loopback 明文 HTTP 代理） |
 | `maxRequestsPerMinute` | `30` | 每客户端每分钟的低频限流上限 |
 
 `endpoint` 始终拒绝：相对/非法 URL、内嵌用户名/密码、fragment、非 `http(s):` 协议；`http:` 仅当 `allowCustomEndpoint: true` 且目标为 loopback（`127.0.0.1`/`localhost`/`[::1]`）时放行。
+
+插件启动时校验 `timeoutMs`，不符合范围会立即抛出配置错误，不会进入 `setTimeout()`。上限用于保证配置语义与 Node.js 定时器实际行为一致。
 
 错误码固定为五个稳定值，通过 `codedError(code, message, status?)` 附着在 `Error.code` 上（`status` 为可选的数值 HTTP 状态，仅用于服务端日志，不进入响应体）：
 
