@@ -91,7 +91,7 @@ DSH WebServer 当前允许绑定 `127.0.0.1` 或 `0.0.0.0`。非 loopback 部署
 | 超过 `maxRequestsPerMinute` | `429` | `{ "ok": false, "code": "billing_service_unavailable" }` |
 | 任何 `getBalance()` 失败 | `502` | `{ "ok": false, "code": "<稳定错误码>" }` |
 
-统一响应头 `Cache-Control: no-store`（余额是敏感、易变数据），所有失败态（含 `403`）都返回 `{ ok: false, code }`。路由在方法检查、限流、读取凭据之前先复刻 DSH 自己的 `/api` browser-trust fence，并以**空信任列表**把该路由锁定为 loopback-only（拒绝 `Sec-Fetch-Site: cross-site`、拒绝跨域 `Origin`）；这是因为 `exact` 路由会在 webserver 的匹配中优先于 `/api` 前缀路由，从而绕过连接层自带的那道 fence，而余额路由读取 API Key、发起上游调用、返回账户数据，属于与 DSH `credentials`/`settings` 平面同级的高权限路由，因此 `--trusted-host`（DNS-rebinding 白名单，非鉴权）不放开它。路由只允许五个固定错误码；缺失或未知 `.code` 统一兜底为 `billing_service_unavailable`。限流按客户端地址（loopback 单用户部署下即全局）固定窗口计数，`429` 在读取凭据、发起上游请求之前返回。
+统一响应头 `Cache-Control: no-store`（余额是敏感、易变数据）。每个通过 loopback fence 之后的响应 envelope（成功 `200`、方法拒绝 `405`、限流 `429`、失败 `502`）都会附带配置的 `timeoutMs`（非敏感数字），客户端据此把自己的请求超时对齐为 `timeoutMs + 余量`，避免客户端在宿主仍在等待上游时提前判超时；fence 之前的 `403` 面向不受信任的请求方，刻意不附带 `timeoutMs`。路由在方法检查、限流、读取凭据之前先复刻 DSH 自己的 `/api` browser-trust fence，并直接把该路由硬编码为 loopback-only（`isLoopbackApiRequest`，不接入任何信任列表；拒绝 `Sec-Fetch-Site: cross-site`、拒绝跨域 `Origin`）；这是因为 `exact` 路由会在 webserver 的匹配中优先于 `/api` 前缀路由，从而绕过连接层自带的那道 fence，而余额路由读取 API Key、发起上游调用、返回账户数据，属于与 DSH `credentials`/`settings` 平面同级的高权限路由，因此 `--trusted-host`（DNS-rebinding 白名单，非鉴权）不放开它。路由只允许五个固定错误码；缺失或未知 `.code` 统一兜底为 `billing_service_unavailable`。限流按客户端地址（loopback 单用户部署下即全局）固定窗口计数，`429` 在读取凭据、发起上游请求之前返回。
 
 服务端日志只记录稳定错误码（以及观测到的数值 HTTP 状态），**不记录**：API Key、`Authorization` 头、上游响应正文、完整自定义 endpoint（尤其是 query string）、凭据服务抛出的原始消息。堆栈、内部路径、上游正文绝不进响应体。
 

@@ -56,4 +56,4 @@
 
 ## 配置与安全
 
-详见 [配置与安全](https://github.com/golitter/dsh-deepseek-billing/blob/main/docs/design/configuration-and-security.md)。其中 `timeoutMs` 必须为大于 `0` 且不超过 `120000` 毫秒的有限数值，避免 Node.js 定时器溢出。
+详见 [配置与安全](https://github.com/golitter/dsh-deepseek-billing/blob/main/docs/design/configuration-and-security.md)。其中 `timeoutMs` 必须为大于 `0` 且不超过 `120000` 毫秒的有限数值，避免 Node.js 定时器溢出；设置页的等待超时会自动对齐该值（响应中附带 `timeoutMs`，客户端按其加余量对齐）。

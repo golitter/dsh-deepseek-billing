@@ -55,7 +55,8 @@ section 使用 `aria-labelledby` 指向标题（标题 id 由 `React.useId()` �
 1. 每次新请求前 `requestRef.current.abort()` 取消旧请求。
 2. 组件卸载时（`useEffect` cleanup）`abort()` 并置空。
 3. 回调里比对 `requestRef.current !== controller`，过期响应直接丢弃。
-4. `AbortError` 的拒绝静默忽略（是主动取消，不是错误）。
+4. 每个请求带客户端超时，防止本地连接挂起导致页面永远停留在加载态。初始值为宿主 `timeoutMs` 上限 `120s` + 5s 余量（保证首轮请求永不早于宿主超时；该常量与 `lib/index.js` 的 `MAX_TIMEOUT_MS` 构成跨文件契约，需同步修改），并从宿主通过 fence 后的响应 envelope 附带的 `timeoutMs` 学习实际配置，后续请求对齐为 `timeoutMs + 5s`（成功、405/429/502 都可学习，并钳制在默认上限内，防止畸形超大值让定时器失效；畸形值忽略）。超时触发 `controller.abort()`，并在回调里区分为稳定的 `balance_timeout` 错误态，而不是静默取消。
+5. 其余 `AbortError` 的拒绝静默忽略（是主动取消，不是错误）。
 
 这保证「旧请求结果不会覆盖新请求状态」。
 

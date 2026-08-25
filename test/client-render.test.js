@@ -342,6 +342,80 @@ test('refresh failure keeps the last successful balance and translates immediate
   }
 })
 
+test('request timeout surfaces the stable balance_timeout error state', async () => {
+  const fixture = await createRenderFixture()
+  const previousSetTimeout = globalThis.setTimeout
+  const previousClearTimeout = globalThis.clearTimeout
+  const timers = []
+  globalThis.setTimeout = (callback, delay) => {
+    timers.push({ callback, delay })
+    return {}
+  }
+  globalThis.clearTimeout = () => {}
+  try {
+    const tree = fixture.render()
+    assert.equal(fixture.pending.calls.length, 1)
+    assert.match(textContent(tree), /正在获取余额/)
+
+    // Before the Host reports its timeout, the client bound is the Host
+    // maximum (120s) plus margin — never shorter than the Host timeout.
+    assert.equal(timers.length, 1)
+    assert.equal(timers[0].delay, 125_000)
+
+    // Fire the client-side request timer: the controller aborts, the fetch
+    // rejects with AbortError, and the page settles on balance_timeout.
+    timers[0].callback()
+    await flush()
+
+    assert.equal(fixture.pending.calls[0].options.signal.aborted, true)
+    const settled = fixture.render()
+    assert.doesNotMatch(textContent(settled), /正在获取余额/)
+    assert.match(textContent(settled), /暂时无法获取余额/)
+    assert.match(textContent(settled), /获取余额超时/)
+
+    // A later manual refresh still works; its error envelope carries the
+    // Host timeout, so the next request aligns to timeoutMs + margin.
+    findElement(settled, (node) => node.type === 'button').props.onClick()
+    assert.equal(fixture.pending.calls.length, 2)
+    assert.equal(timers[1].delay, 125_000)
+    fixture.pending.calls[1].resolve(response(502, {
+      ok: false,
+      code: 'billing_service_unavailable',
+      timeoutMs: 10_000,
+    }))
+    await flush()
+    assert.match(textContent(fixture.render()), /暂时无法获取余额/)
+
+    findElement(fixture.render(), (node) => node.type === 'button').props.onClick()
+    assert.equal(fixture.pending.calls.length, 3)
+    assert.equal(timers[2].delay, 15_000)
+    fixture.pending.calls[2].resolve(response(200, validBalance()))
+    await flush()
+    assert.match(textContent(fixture.render()), /12\.34/)
+
+    // A bogus oversized timeoutMs in an envelope can never widen the request
+    // bound past the client default — the timer stays effective.
+    findElement(fixture.render(), (node) => node.type === 'button').props.onClick()
+    assert.equal(fixture.pending.calls.length, 4)
+    assert.equal(timers[3].delay, 15_000)
+    fixture.pending.calls[3].resolve(response(502, {
+      ok: false,
+      code: 'billing_service_unavailable',
+      timeoutMs: 1e12,
+    }))
+    await flush()
+    findElement(fixture.render(), (node) => node.type === 'button').props.onClick()
+    assert.equal(fixture.pending.calls.length, 5)
+    assert.equal(timers[4].delay, 125_000)
+    fixture.pending.calls[4].resolve(response(200, validBalance()))
+    await flush()
+  } finally {
+    globalThis.setTimeout = previousSetTimeout
+    globalThis.clearTimeout = previousClearTimeout
+    fixture.cleanup()
+  }
+})
+
 test('initial failure stays a full error state and unmount cancels the retry', async () => {
   const fixture = await createRenderFixture()
   try {

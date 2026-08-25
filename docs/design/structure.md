@@ -32,9 +32,9 @@
 │       ├── limitations.md
 │       └── structure.md
 ├── test/
-│   ├── index.test.js   # 宿主端服务、错误码、路由、命令与配置测试（29 cases）
+│   ├── index.test.js   # 宿主端服务、错误码、路由、命令与配置测试（30 cases）
 │   ├── client.test.js  # 客户端模块、注入、国际化、命令行插槽与会话提示（3 cases）
-│   ├── client-render.test.js # 余额页状态、响应校验、刷新、ARIA 与翻译行为（4 cases）
+│   ├── client-render.test.js # 余额页状态、响应校验、刷新、超时、ARIA 与翻译行为（5 cases）
 │   └── package.test.js # 发布元数据、peer 与发布文件边界契约
 ├── AGENTS.md           # 代码代理约束
 └── README.md           # 安装、使用与详细文档入口

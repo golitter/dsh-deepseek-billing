@@ -187,7 +187,7 @@ test('405 responses use the stable error-code shape', async () => {
   assert.equal(output.status, 405)
   assert.equal(output.headers.allow, 'GET')
   assert.equal(output.headers['cache-control'], 'no-store')
-  assert.deepEqual(output.body, { ok: false, code: 'billing_service_unavailable' })
+  assert.deepEqual(output.body, { ok: false, code: 'billing_service_unavailable', timeoutMs: 10_000 })
 })
 
 test('maps request timeout to balance_timeout', async () => {
@@ -270,6 +270,7 @@ test('GET route returns balances and stable service errors', async () => {
     assert.equal(success.output.headers['cache-control'], 'no-store')
     assert.deepEqual(success.output.body, {
       ok: true,
+      timeoutMs: 10_000,
       balance: {
         currency: 'CNY',
         total_balance: '12.34',
@@ -283,13 +284,13 @@ test('GET route returns balances and stable service errors', async () => {
     const failure = createResponse()
     await errorHandler(getRequest(), failure.res)
     assert.equal(failure.output.status, 502)
-    assert.deepEqual(failure.output.body, { ok: false, code: 'missing_credential' })
+    assert.deepEqual(failure.output.body, { ok: false, code: 'missing_credential', timeoutMs: 10_000 })
 
     const { handler: fallbackHandler } = createContext(() => { throw new Error('credential service failed') })
     const fallback = createResponse()
     await fallbackHandler(getRequest(), fallback.res)
     assert.equal(fallback.output.status, 502)
-    assert.deepEqual(fallback.output.body, { ok: false, code: 'billing_service_unavailable' })
+    assert.deepEqual(fallback.output.body, { ok: false, code: 'billing_service_unavailable', timeoutMs: 10_000 })
 
     const { handler: foreignCodeHandler } = createContext(() => {
       const error = new Error('credential service failed with a foreign code')
@@ -299,7 +300,7 @@ test('GET route returns balances and stable service errors', async () => {
     const foreignCode = createResponse()
     await foreignCodeHandler(getRequest(), foreignCode.res)
     assert.equal(foreignCode.output.status, 502)
-    assert.deepEqual(foreignCode.output.body, { ok: false, code: 'billing_service_unavailable' })
+    assert.deepEqual(foreignCode.output.body, { ok: false, code: 'billing_service_unavailable', timeoutMs: 10_000 })
   } finally {
     globalThis.fetch = originalFetch
     console.error = originalConsoleError
@@ -569,7 +570,7 @@ test('rate limiting blocks requests before reading credentials or fetching upstr
     const second = createResponse()
     await handler(getRequest({ socket: { remoteAddress: '127.0.0.1' } }), second.res)
     assert.equal(second.output.status, 429)
-    assert.deepEqual(second.output.body, { ok: false, code: 'billing_service_unavailable' })
+    assert.deepEqual(second.output.body, { ok: false, code: 'billing_service_unavailable', timeoutMs: 10_000 })
     assert.equal(fetchCalls, 1)
     assert.equal(credentialResolves, 1)
   } finally {
@@ -756,6 +757,7 @@ test('applies the browser-trust fence before any upstream work', async () => {
     const untrustedHost = createResponse()
     await handler(getRequest({ headers: { host: 'evil.example.com' } }), untrustedHost.res)
     assert.equal(untrustedHost.output.status, 403)
+    // Pre-fence 403s go to untrusted requesters and omit the timeoutMs config.
     assert.deepEqual(untrustedHost.output.body, { ok: false, code: 'billing_service_unavailable' })
 
     const missingHost = createResponse()
@@ -782,6 +784,26 @@ test('applies the browser-trust fence before any upstream work', async () => {
     await handler(getRequest({ headers: { host: '127.0.0.1', origin: 'http://127.0.0.1' } }), sameOrigin.res)
     assert.equal(sameOrigin.output.status, 200)
     assert.equal(fetchCalls, 2)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('every post-fence envelope reports the configured timeoutMs; pre-fence 403s do not', async () => {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => { throw new Error('must not be reached') }
+  try {
+    const { handler } = createContext(undefined, { timeoutMs: 45_000 })
+
+    const forbidden = createResponse()
+    await handler(getRequest({ headers: { host: 'evil.example.com' } }), forbidden.res)
+    assert.equal(forbidden.output.status, 403)
+    assert.deepEqual(forbidden.output.body, { ok: false, code: 'billing_service_unavailable' })
+
+    const wrongMethod = createResponse()
+    await handler({ method: 'POST', headers: { host: '127.0.0.1' } }, wrongMethod.res)
+    assert.equal(wrongMethod.output.status, 405)
+    assert.deepEqual(wrongMethod.output.body, { ok: false, code: 'billing_service_unavailable', timeoutMs: 45_000 })
   } finally {
     globalThis.fetch = originalFetch
   }
