@@ -30,8 +30,7 @@
 │       ├── configuration-and-security.md
 │       ├── verification.md
 │       ├── limitations.md
-│       ├── structure.md
-│       └── improvement-plan.md
+│       └── structure.md
 ├── test/
 │   ├── index.test.js   # 宿主端服务、错误码、路由、命令与配置测试（29 cases）
 │   ├── client.test.js  # 客户端模块、注入、国际化、命令行插槽与会话提示（3 cases）
