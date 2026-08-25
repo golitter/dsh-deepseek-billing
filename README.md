@@ -30,8 +30,13 @@
 2. 在 `$DSH_HOME/.credentials.yaml` 中配置 DeepSeek API Key：
 
    ```yaml
-   DEEPSEEK_API_KEY: sk-xxxxxxxxxxxxxxxx
+   version: 1
+
+   refs:
+     DEEPSEEK_API_KEY: sk-xxxxxxxxxxxxxxxx
    ```
+
+   DSH 启动时会迁移已存在的旧扁平凭据文档；新文档请直接使用 `version: 1` 和 `refs` 格式。POSIX 系统上应限制文件权限，例如 `chmod 600 "$DSH_HOME/.credentials.yaml"`；不要在文档、日志或截图中记录真实密钥。
 
 3. 启动 DSH Web：
 

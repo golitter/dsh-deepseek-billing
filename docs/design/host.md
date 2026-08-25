@@ -74,6 +74,8 @@ DeepSeek 返回（客户端实际用到的字段）：
 
 宿主半校验响应容器、`balance_infos` 数组、首条记录及四个必要字段，并只向客户端返回这些字段。金额仍以 DeepSeek 返回的非空字符串展示，不做计算或币种换算。
 
+DSH WebServer 当前允许绑定 `127.0.0.1` 或 `0.0.0.0`。非 loopback 部署由 DSH connection 层配置受信 authority；该信任列表只防御 DNS rebinding，不提供身份认证。余额路由携带凭据能力并返回账户数据，因此不随 WebServer 的部署范围放宽，独立保持 loopback-only。通过 LAN 或远程地址打开 Web UI 时，普通页面按部署配置工作，但“计费”页的余额请求返回 `403`，这是有意的安全限制。
+
 ### 5.4 HTTP 路由
 
 `GET /api/deepseek-billing/balance`（`kind: 'exact'`）：

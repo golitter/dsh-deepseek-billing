@@ -10,6 +10,8 @@
 node --check lib/index.js
 node --check lib/client.js
 node -e "JSON.parse(require('fs').readFileSync('package.json'))"
+node --test
+npm pack --dry-run
 ```
 
 ### 自动测试
@@ -25,8 +27,21 @@ node --test
 - `test/index.test.js`：29 个宿主端用例，覆盖凭据处理、五个固定错误码、缺失/未知 `.code` 兜底、完整响应超时（含「响应头已返回、响应体挂起」）、卸载时取消活跃上游请求、网络/HTTP 错误、非法响应、字段白名单与长度上限、64 KiB 响应体上限、空余额、GET/405/429/403 路由（403 返回 `{ ok:false, code }`）、browser-trust fence（Host 非 loopback、缺失 Host、cross-site、跨域 Origin、loopback-only 锁定不受 trusted authority 放宽）、限流（超限不再读取凭据或请求上游）、并发合并、`redirect: 'manual'`、endpoint 校验（默认锁定官方地址、`allowCustomEndpoint` 布尔校验、userinfo/fragment/非法 URL/非 loopback HTTP 白名单）、日志脱敏、`/deepseek-billing` 命令（zh/en 菜单说明与结果本地化、语言更新重注册、设置读取失败、语言中性回退、非字符串 `rawInput`）及配置边界。
 - `test/client.test.js`：1 个客户端契约用例，通过真实模块工厂验证模块 ID、`require('react')`、服务注入、词典命名空间、zh/en 键集、动态侧栏标签、命令行插槽，以及 `/deepseek-billing` 回执的当前空白会话限定、成功/错误提示、会话激活清除、60 秒到期、切换清除、导航后过期回执丢弃、命令独占过渡帧和空白阶段历史命令隐藏。
 - `test/client-render.test.js`：1 个余额页行为用例，以轻量 React hook harness 执行真实 `BillingSection`，验证初始加载、刷新时取消旧请求并保留旧余额、成功余额字段、中英文即时重渲染、固定错误码翻译，以及卸载时取消仍在进行的请求。
+- `test/package.test.js`：发布元数据契约用例，验证 `0.1.1` 版本、Node.js 基线、DSH peer 范围、宿主硬依赖、可选 settings peer、客户端六项注入、入口/patch 标识及发布文件边界。
 
 轻量 hook harness 能验证组件状态和请求生命周期，但不包含真实 React DOM、浏览器 CSS/布局与 DSH 完整装配。因此明暗主题、窄屏布局、焦点与 ARIA 的最终呈现，以及真实宿主中的 session/input 协作仍由下方手动清单验证；项目接入浏览器 CI 后再考虑加入完整渲染级测试。
+
+### DSH 0.1.1-rc.2 真实装配
+
+使用隔离的 DSH home 和 `web` profile，确保验证不会修改日常 profile：
+
+```bash
+DSH_RC2_HOME="$(mktemp -d)"
+DSH_HOME="$DSH_RC2_HOME" npx --yes @deepseek-ai/dsh@0.1.1-rc.2 plugin --profile web add "link:$PWD"
+DSH_HOME="$DSH_RC2_HOME" npx --yes @deepseek-ai/dsh@0.1.1-rc.2 --profile web
+```
+
+确认启动日志没有 peer dependency、client module、missing service 或 pending fiber 错误，并检查“设置 → 计费 / Billing”、versioned credentials、余额状态、刷新取消、zh/en 切换、主题/窄屏布局和 `/deepseek-billing` 命令生命周期。通过 LAN/远程 authority 打开 Web UI 时，普通页面按部署配置工作，但余额请求必须返回 `403`；验证使用专用测试凭据或受控 loopback mock，不使用真实生产账户。结束后只清理本次 `mktemp` 创建且已核实的临时目录。
 
 ### 手动检查清单
 

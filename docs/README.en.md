@@ -30,8 +30,13 @@ The feature set is intentionally focused. The Host securely reads the credential
 2. Configure the DeepSeek API Key in `$DSH_HOME/.credentials.yaml`:
 
    ```yaml
-   DEEPSEEK_API_KEY: sk-xxxxxxxxxxxxxxxx
+   version: 1
+
+   refs:
+     DEEPSEEK_API_KEY: sk-xxxxxxxxxxxxxxxx
    ```
+
+   DSH migrates an existing legacy flat credentials document at startup; new documents should use the `version: 1` and `refs` format directly. On POSIX systems, restrict the file to the current user, for example with `chmod 600 "$DSH_HOME/.credentials.yaml"`; do not record a real key in documentation, logs, or screenshots.
 
 3. Start DSH Web:
 
