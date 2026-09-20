@@ -57,3 +57,5 @@ The feature set is intentionally focused. The Host securely reads the credential
 ## Configuration and Security
 
 See [Configuration and Security](https://github.com/golitter/dsh-deepseek-billing/blob/main/docs/design/configuration-and-security.md). `timeoutMs` must be a finite number greater than `0` and no more than `120000` milliseconds, preventing Node.js timer overflow. The settings page aligns its own wait timeout to this value (responses carry `timeoutMs`; the client adds a small margin).
+
+The current release line is `0.2.0`, supporting DSH `>=0.1.5-rc.2 <0.1.6`. The balance route is registered through DSH Connection Fetch and inherits DSH Host/Origin trust checks and browser Cookie authentication; the plugin neither implements nor logs Cookies. DSH `0.1.6-alpha` is not in the supported range.

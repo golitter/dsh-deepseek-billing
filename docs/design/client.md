@@ -21,13 +21,13 @@ window.__ModuleLoader__.load({
 
 DSH 把纯通用 `command` 节点视为控制面内容，因此仅有命令事件的新会话会留在 Hero，持久命令卡不会挂载。插件监听本地客户端执行确认事件 `command/executed`：
 
-- 只处理 `name === 'deepseek-billing'`、回执到达时仍为当前选中会话、会话仍为 `composerPhase === 'blank'` 且带非空 `result.text` 的本地回执；active 会话继续只显示持久命令卡，避免重复反馈；
+- 只处理 `name === 'deepseek-billing'`、回执到达时仍为当前选中会话、会话 snapshot 的 `blank === true` 且带非空 `result.text` 的本地回执；active 会话继续只显示持久命令卡，避免重复反馈；
 - 经 `sessions.scope(sessionId)` 找到准确的会话上下文；
 - 成功文本调用 `notify('info', text)`，错误文本调用 `notify('error', text)`；
 - notice 在会话从 blank 激活或 60 秒到期时自动清除；离开会话时也只清除插件自己发布且尚未被覆盖的精确 notice，导航后才返回的旧回执直接丢弃；
 - 提示使用 DSH 原有输入框 notice UI，不激活会话、不复制余额请求，也不影响其他浏览器标签页。
 
-宿主命令的 `command/run` / `command/done` 仍由 DSH 持久化。为防止空白阶段执行过的余额命令在会话激活后突然显示，插件为 `conversation.chat.commandview` 注册 `deepseek-billing` 专用渲染：命令独占快照的 blank → active 过渡帧直接返回 `null`；首个非 `command` 节点出现后，再比较 `seq`，更早的命令继续隐藏，之后执行的命令正常显示结果。该处理避免激活瞬间闪现，只改变本插件命令的客户端呈现，不修改或删除会话日志。
+宿主命令的 `command/run` / `command/done` 仍由 DSH 持久化。为防止空白阶段执行过的余额命令在会话激活后突然显示，插件为 `conversation.chat.commandview` 注册 `deepseek-billing` 专用渲染，并从 session-scope `useChat(snapshot => snapshot.legacy.nodes)` 读取节点：命令独占快照的 blank → active 过渡帧直接返回 `null`；首个非 `command` 节点出现后，再比较 `seq`，更早的命令继续隐藏，之后执行的命令正常显示结果。
 
 ### 6.3 组件状态机
 

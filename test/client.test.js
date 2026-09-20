@@ -132,7 +132,7 @@ async function createClientFixture({ fakeTimers = false } = {}) {
           if (sessionId === 'session-1') {
             return {
               session: {
-                getSnapshot: () => ({ composerPhase: sessionPhase }),
+                getSnapshot: () => ({ blank: sessionPhase === 'blank' }),
                 subscribe(listener) {
                   sessionListeners.add(listener)
                   return () => sessionListeners.delete(listener)
@@ -143,7 +143,7 @@ async function createClientFixture({ fakeTimers = false } = {}) {
           if (sessionId === 'session-2') {
             return {
               session: {
-                getSnapshot: () => ({ composerPhase: 'active' }),
+                getSnapshot: () => ({ blank: false }),
                 subscribe() {
                   return () => {}
                 },
@@ -250,11 +250,11 @@ test('client hides blank command history and renders active command rows', async
     const blankCommand = { kind: 'command', seq: 1, name: 'deepseek-billing', outcome: { kind: 'success', text: 'CNY 16.70' } }
     const userMessage = { kind: 'user-message', seq: 3 }
     const afterActivation = { kind: 'command', seq: 4, name: 'deepseek-billing', outcome: { kind: 'success', text: 'CNY 16.66' } }
-    const useSession = (selector) => selector({ nodes: [blankCommand, userMessage, afterActivation] })
-    const commandOnlyTransition = (selector) => selector({ nodes: [blankCommand] })
-    assert.equal(commandSlot.component({ node: blankCommand, useSession: commandOnlyTransition }), null)
-    assert.equal(commandSlot.component({ node: blankCommand, useSession }), null)
-    const visibleCommand = commandSlot.component({ node: afterActivation, useSession })
+    const useChat = (selector) => selector({ legacy: { nodes: [blankCommand, userMessage, afterActivation] } })
+    const commandOnlyTransition = (selector) => selector({ legacy: { nodes: [blankCommand] } })
+    assert.equal(commandSlot.component({ node: blankCommand, useChat: commandOnlyTransition }), null)
+    assert.equal(commandSlot.component({ node: blankCommand, useChat }), null)
+    const visibleCommand = commandSlot.component({ node: afterActivation, useChat })
     assert.equal(visibleCommand.type, 'DisclosureRow')
     assert.equal(visibleCommand.props.icon.type, 'IconApiOutline14')
     assert.equal(visibleCommand.props.collapsedContent.at(-1).children[0], 'CNY 16.66')

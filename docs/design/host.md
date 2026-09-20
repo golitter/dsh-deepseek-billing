@@ -8,7 +8,7 @@
 
 ```js
 export const name = 'deepseek-billing'
-export const inject = ['credentials', 'webServer', 'commands']
+export const inject = ['credentials', 'connection', 'commands']
 
 const DEFAULT_ENDPOINT = 'https://api.deepseek.com/user/balance'
 const CREDENTIAL_REF = 'DEEPSEEK_API_KEY'
@@ -28,7 +28,7 @@ const DEFAULT_COMMAND_DESCRIPTION = 'show the DeepSeek account balance'
 | `endpoint` | `https://api.deepseek.com/user/balance` | 余额接口地址。`allowCustomEndpoint: false` 时必须是官方默认值 |
 | `timeoutMs` | `10000` | 覆盖完整请求（响应头 + 响应体读取 + 解析 + 校验）的超时；必须满足 `0 < timeoutMs <= 120000`，允许小数 |
 | `allowCustomEndpoint` | `false` | 必须是布尔值 `true`/`false`；`false` 时锁定官方默认 endpoint，`true` 时允许自定义 `https:`（或 loopback 明文 HTTP 代理） |
-| `maxRequestsPerMinute` | `30` | 每客户端每分钟的低频限流上限 |
+| `maxRequestsPerMinute` | `30` | 每个已认证浏览器 Cookie 摘要每分钟的低频限流上限；无 Cookie 使用受限匿名桶 |
 
 `endpoint` 始终拒绝：相对/非法 URL、内嵌用户名/密码、fragment、非 `http(s):` 协议；`http:` 仅当 `allowCustomEndpoint: true` 且目标为 loopback（`127.0.0.1`/`localhost`/`[::1]`）时放行。
 
@@ -77,21 +77,20 @@ DeepSeek 返回（客户端实际用到的字段）：
 
 宿主半校验响应容器、`balance_infos` 数组、首条记录及四个必要字段，并只向客户端返回这些字段。金额仍以 DeepSeek 返回的非空字符串展示，不做计算或币种换算。
 
-DSH WebServer 当前允许绑定 `127.0.0.1` 或 `0.0.0.0`。非 loopback 部署由 DSH connection 层配置受信 authority；该信任列表只防御 DNS rebinding，不提供身份认证。余额路由携带凭据能力并返回账户数据，因此不随 WebServer 的部署范围放宽，独立保持 loopback-only。通过 LAN 或远程地址打开 Web UI 时，普通页面按部署配置工作，但“计费”页的余额请求返回 `403`，这是有意的安全限制。
+余额路由通过 DSH Connection 注册，因此继承统一的 Host/Origin trust fence、启动 URL 换取签名 Cookie 和浏览器认证；插件不再自建或重复判断这层边界。认证后的受信部署可按 DSH 配置访问，认证失败的 `401`/`403` 不进入插件 handler。
 
 ### 5.4 HTTP 路由
 
-`GET /api/deepseek-billing/balance`（`kind: 'exact'`）：
+`ctx.connection.fetch.register({ path: '/api/deepseek-billing/balance', methods: ['GET', 'HEAD', 'POST'], requestBody: 'buffered', fetch })`：
 
 | 场景 | 状态码 | 响应体 |
 |---|---|---|
 | 成功 | `200` | `{ "ok": true, "balance": {...} }` |
-| 未通过 browser-trust fence | `403` | `{ "ok": false, "code": "billing_service_unavailable" }` |
 | 非 GET | `405` | `{ "ok": false, "code": "billing_service_unavailable" }` + `Allow: GET` |
 | 超过 `maxRequestsPerMinute` | `429` | `{ "ok": false, "code": "billing_service_unavailable" }` |
 | 任何 `getBalance()` 失败 | `502` | `{ "ok": false, "code": "<稳定错误码>" }` |
 
-统一响应头 `Cache-Control: no-store`（余额是敏感、易变数据）。每个通过 loopback fence 之后的响应 envelope（成功 `200`、方法拒绝 `405`、限流 `429`、失败 `502`）都会附带配置的 `timeoutMs`（非敏感数字），客户端据此把自己的请求超时对齐为 `timeoutMs + 余量`，避免客户端在宿主仍在等待上游时提前判超时；fence 之前的 `403` 面向不受信任的请求方，刻意不附带 `timeoutMs`。路由在方法检查、限流、读取凭据之前先复刻 DSH 自己的 `/api` browser-trust fence，并直接把该路由硬编码为 loopback-only（`isLoopbackApiRequest`，不接入任何信任列表；拒绝 `Sec-Fetch-Site: cross-site`、拒绝跨域 `Origin`）；这是因为 `exact` 路由会在 webserver 的匹配中优先于 `/api` 前缀路由，从而绕过连接层自带的那道 fence，而余额路由读取 API Key、发起上游调用、返回账户数据，属于与 DSH `credentials`/`settings` 平面同级的高权限路由，因此 `--trusted-host`（DNS-rebinding 白名单，非鉴权）不放开它。路由只允许五个固定错误码；缺失或未知 `.code` 统一兜底为 `billing_service_unavailable`。限流按客户端地址（loopback 单用户部署下即全局）固定窗口计数，`429` 在读取凭据、发起上游请求之前返回。
+统一响应头 `Cache-Control: no-store`（余额是敏感、易变数据）。插件 handler 的成功、方法拒绝、限流和失败 envelope 都附带配置的 `timeoutMs`；认证前由 Connection 产生的 `401`/`403` 不附带插件 envelope。路由只允许五个固定错误码；缺失或未知 `.code` 统一兜底为 `billing_service_unavailable`。限流按 Cookie 的 SHA-256 摘要分桶（无 Cookie 使用受限匿名桶），不保存、记录或返回原始 Cookie，且在读取凭据、发起上游请求之前返回 `429`。
 
 服务端日志只记录稳定错误码（以及观测到的数值 HTTP 状态），**不记录**：API Key、`Authorization` 头、上游响应正文、完整自定义 endpoint（尤其是 query string）、凭据服务抛出的原始消息。堆栈、内部路径、上游正文绝不进响应体。
 

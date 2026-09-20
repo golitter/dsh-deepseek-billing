@@ -57,3 +57,5 @@
 ## 配置与安全
 
 详见 [配置与安全](https://github.com/golitter/dsh-deepseek-billing/blob/main/docs/design/configuration-and-security.md)。其中 `timeoutMs` 必须为大于 `0` 且不超过 `120000` 毫秒的有限数值，避免 Node.js 定时器溢出；设置页的等待超时会自动对齐该值（响应中附带 `timeoutMs`，客户端按其加余量对齐）。
+
+当前发布线为 `0.2.0`，支持 DSH `>=0.1.5-rc.2 <0.1.6`。余额路由通过 DSH Connection 的 Fetch 注册，继承 DSH 的 Host/Origin 信任检查和浏览器 Cookie 认证；认证由 DSH 启动 URL 完成，插件不会自行实现或记录 Cookie。`0.1.6-alpha` 尚未纳入支持范围。

@@ -26,7 +26,7 @@
 
 - API Key 只在宿主端经 DSH 凭证库读取，请求 DeepSeek 官方接口时以 `Authorization: Bearer` 发送，绝不写入日志、响应或发送到浏览器。
 - **自定义 `endpoint`（尤其是本地代理）会收到完整的 Bearer API Key**，请在信任该目标的前提下再修改配置；默认锁定官方 HTTPS 地址，只有 `allowCustomEndpoint: true` 才允许改动，且始终拒绝内嵌用户名/密码、fragment、非 `http(s):` 协议、非 loopback 明文 HTTP，以及跨域自动重定向。
-- DSH WebServer 当前允许绑定 `127.0.0.1` 或 `0.0.0.0`。非 loopback 部署需要由 DSH connection 层配置受信 authority；该信任列表只防御 DNS rebinding，不提供身份认证。余额路由读取 API Key、发起上游调用、返回账户数据，属高权限操作，因此复刻 DSH `/api` 的 browser-trust fence 并**独立锁定本机**：请求 `Host` 必须为 loopback、拒绝 cross-site 与跨域 `Origin`，未通过返回 `403 { ok:false, code }`。通过 LAN 或远程地址打开 Web UI 时，普通页面按部署配置工作，但“计费”页的余额请求返回 `403`，这是有意的安全限制。`--trusted-host`（DNS-rebinding 白名单，非鉴权）不放开余额。
+- 余额路由通过 DSH Connection Fetch 注册，继承统一的 Host/Origin trust fence、启动 URL 签名 Cookie 和浏览器认证。认证失败的 `401`/`403` 由 Connection 返回；认证后的受信部署按 DSH 配置工作。插件只用 Cookie 的 SHA-256 摘要做限流键，不保存或记录原始 Cookie。
 - 余额响应体受 64 KiB 硬上限约束，余额字段受长度上限约束；服务端日志只记录稳定错误码，不含密钥、`Authorization` 头、上游正文或 endpoint query。
 - 所有失败响应统一为 `{ ok: false, code }`，`code` 取固定错误码，客户端按当前语言翻译。
 - `timeoutMs` 超过 `120000` 毫秒、为 `0`/负数、`NaN` 或无穷大时，插件启动阶段拒绝配置；这避免超大值触发 Node.js `setTimeout()` 溢出并被意外缩短。

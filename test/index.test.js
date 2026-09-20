@@ -6,6 +6,7 @@ import { apply } from '../lib/index.js'
 function createContext(credential = { value: 'fixture-credential' }, config = {}, localePreference = 'zh') {
   let service
   let handler
+  let route
   let command
   let settingsListener
   let currentLocalePreference = localePreference
@@ -32,10 +33,23 @@ function createContext(credential = { value: 'fixture-credential' }, config = {}
       assert.equal(name, 'deepseekBilling')
       service = value
     },
-    webServer: {
-      register(route) {
-        handler = route.handler
-        return () => {}
+    connection: {
+      fetch: {
+        register(nextRoute) {
+          route = nextRoute
+          handler = async (legacyRequest, legacyResponse) => {
+            const request = new Request('http://dsh.test/api/deepseek-billing/balance', {
+              method: legacyRequest.method ?? 'GET',
+              headers: legacyRequest.headers,
+            })
+            const response = await route.fetch(request)
+            const headers = {}
+            response.headers.forEach((value, key) => { headers[key] = value })
+            legacyResponse.writeHead(response.status, headers)
+            legacyResponse.end(await response.text())
+          }
+          return () => { if (route === nextRoute) route = undefined }
+        },
       },
     },
     commands: {
@@ -64,6 +78,7 @@ function createContext(credential = { value: 'fixture-credential' }, config = {}
   return {
     service,
     handler,
+    route,
     command,
     getCommand: () => command,
     async dispose() {
@@ -562,13 +577,13 @@ test('rate limiting blocks requests before reading credentials or fetching upstr
     const { handler } = context
 
     const first = createResponse()
-    await handler(getRequest({ socket: { remoteAddress: '127.0.0.1' } }), first.res)
+    await handler(getRequest({ headers: { cookie: 'dsh-session=a' } }), first.res)
     assert.equal(first.output.status, 200)
     assert.equal(fetchCalls, 1)
     assert.equal(credentialResolves, 1)
 
     const second = createResponse()
-    await handler(getRequest({ socket: { remoteAddress: '127.0.0.1' } }), second.res)
+    await handler(getRequest({ headers: { cookie: 'dsh-session=a' } }), second.res)
     assert.equal(second.output.status, 429)
     assert.deepEqual(second.output.body, { ok: false, code: 'billing_service_unavailable', timeoutMs: 10_000 })
     assert.equal(fetchCalls, 1)
@@ -699,7 +714,7 @@ test('logs only the stable code, never credentials or the endpoint query', async
     globalThis.fetch = async () => { throw new Error('upstream exploded with sk-super-secret') }
     const { handler } = createContext({ value: 'sk-super-secret' }, { endpoint: 'https://api.deepseek.com/user/balance?token=querysecret', allowCustomEndpoint: true })
     const { output, res } = createResponse()
-    await handler(getRequest({ socket: { remoteAddress: '127.0.0.1' } }), res)
+    await handler(getRequest({ headers: { cookie: 'dsh-session=redacted' } }), res)
 
     assert.equal(output.status, 502)
     const joined = logs.join('\n')
@@ -733,105 +748,50 @@ test('slash command tolerates a missing or non-string rawInput', async () => {
   }
 })
 
-test('applies the browser-trust fence before any upstream work', async () => {
+test('registers a Connection Fetch route and buckets limits by cookie digest', async () => {
   const originalFetch = globalThis.fetch
-  let fetchCalls = 0
+  let calls = 0
   let credentialResolves = 0
   globalThis.fetch = async () => {
-    fetchCalls += 1
-    return jsonResponse({
-      balance_infos: [{
-        currency: 'CNY',
-        total_balance: '1.00',
-        granted_balance: '0.00',
-        topped_up_balance: '1.00',
-      }],
-    })
-  }
-  try {
-    const { handler } = createContext(async () => {
-      credentialResolves += 1
-      return { value: 'fixture-credential' }
-    })
-
-    const untrustedHost = createResponse()
-    await handler(getRequest({ headers: { host: 'evil.example.com' } }), untrustedHost.res)
-    assert.equal(untrustedHost.output.status, 403)
-    // Pre-fence 403s go to untrusted requesters and omit the timeoutMs config.
-    assert.deepEqual(untrustedHost.output.body, { ok: false, code: 'billing_service_unavailable' })
-
-    const missingHost = createResponse()
-    await handler({ method: 'GET' }, missingHost.res)
-    assert.equal(missingHost.output.status, 403)
-
-    const crossSite = createResponse()
-    await handler(getRequest({ headers: { host: '127.0.0.1', 'sec-fetch-site': 'cross-site' } }), crossSite.res)
-    assert.equal(crossSite.output.status, 403)
-
-    const crossOrigin = createResponse()
-    await handler(getRequest({ headers: { host: '127.0.0.1', origin: 'https://evil.example.com' } }), crossOrigin.res)
-    assert.equal(crossOrigin.output.status, 403)
-
-    assert.equal(fetchCalls, 0)
-    assert.equal(credentialResolves, 0)
-
-    const allowed = createResponse()
-    await handler(getRequest(), allowed.res)
-    assert.equal(allowed.output.status, 200)
-    assert.equal(fetchCalls, 1)
-
-    const sameOrigin = createResponse()
-    await handler(getRequest({ headers: { host: '127.0.0.1', origin: 'http://127.0.0.1' } }), sameOrigin.res)
-    assert.equal(sameOrigin.output.status, 200)
-    assert.equal(fetchCalls, 2)
-  } finally {
-    globalThis.fetch = originalFetch
-  }
-})
-
-test('every post-fence envelope reports the configured timeoutMs; pre-fence 403s do not', async () => {
-  const originalFetch = globalThis.fetch
-  globalThis.fetch = async () => { throw new Error('must not be reached') }
-  try {
-    const { handler } = createContext(undefined, { timeoutMs: 45_000 })
-
-    const forbidden = createResponse()
-    await handler(getRequest({ headers: { host: 'evil.example.com' } }), forbidden.res)
-    assert.equal(forbidden.output.status, 403)
-    assert.deepEqual(forbidden.output.body, { ok: false, code: 'billing_service_unavailable' })
-
-    const wrongMethod = createResponse()
-    await handler({ method: 'POST', headers: { host: '127.0.0.1' } }, wrongMethod.res)
-    assert.equal(wrongMethod.output.status, 405)
-    assert.deepEqual(wrongMethod.output.body, { ok: false, code: 'billing_service_unavailable', timeoutMs: 45_000 })
-  } finally {
-    globalThis.fetch = originalFetch
-  }
-})
-
-test('keeps the balance route loopback-only, not widened by trusted authorities', async () => {
-  const originalFetch = globalThis.fetch
-  let fetchCalls = 0
-  globalThis.fetch = async () => {
-    fetchCalls += 1
+    calls += 1
     return jsonResponse({ balance_infos: [] })
   }
   try {
-    const { handler } = createContext()
+    const context = createContext(async () => {
+      credentialResolves += 1
+      return { value: 'fixture-credential' }
+    }, { maxRequestsPerMinute: 1 })
+    assert.deepEqual(context.route, {
+      path: '/api/deepseek-billing/balance',
+      methods: ['GET', 'HEAD', 'POST'],
+      requestBody: 'buffered',
+      fetch: context.route.fetch,
+    })
 
-    const loopback = createResponse()
-    await handler(getRequest({ headers: { host: 'localhost' } }), loopback.res)
-    assert.equal(loopback.output.status, 200)
-    assert.equal(fetchCalls, 1)
-
-    // A non-loopback Host is refused even if it would be a `--trusted-host`
-    // authority elsewhere in DSH: this route touches the API key.
-    const lan = createResponse()
-    await handler(getRequest({ headers: { host: 'lan-host.local:8080' } }), lan.res)
-    assert.equal(lan.output.status, 403)
-    assert.deepEqual(lan.output.body, { ok: false, code: 'billing_service_unavailable' })
-    assert.equal(fetchCalls, 1)
+    const first = createResponse()
+    await context.handler(getRequest({ headers: { host: 'ignored', cookie: 'dsh-session=a' } }), first.res)
+    assert.equal(first.output.status, 200)
+    const sameCookie = createResponse()
+    await context.handler(getRequest({ headers: { cookie: 'dsh-session=a' } }), sameCookie.res)
+    assert.equal(sameCookie.output.status, 429)
+    const otherCookie = createResponse()
+    await context.handler(getRequest({ headers: { cookie: 'dsh-session=b' } }), otherCookie.res)
+    assert.equal(otherCookie.output.status, 200)
+    assert.equal(calls, 2)
+    assert.equal(credentialResolves, 2)
+    assert.equal(JSON.stringify(context.route).includes('dsh-session='), false)
   } finally {
     globalThis.fetch = originalFetch
   }
+})
+
+test('Connection route owns authentication while plugin handles method rejection', async () => {
+  const { route } = createContext()
+  assert.equal(route.methods.includes('GET'), true)
+  assert.equal(route.methods.includes('HEAD'), true)
+  assert.equal(route.methods.includes('POST'), true)
+  const response = await route.fetch(new Request('http://dsh.test/api/deepseek-billing/balance', { method: 'POST' }))
+  assert.equal(response.status, 405)
+  assert.equal(response.headers.get('allow'), 'GET')
+  assert.deepEqual(await response.json(), { ok: false, code: 'billing_service_unavailable', timeoutMs: 10_000 })
 })

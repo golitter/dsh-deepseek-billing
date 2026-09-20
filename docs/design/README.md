@@ -1,6 +1,6 @@
 # dsh-deepseek-billing 设计文档
 
-> 版本：对应 package.json `0.1.1`。已按 DSH `0.1.1-rc.2`（上游 SHA `b150a551b8d465e31e418e1b2eaf5e79bbb7d28e`）完成适配记录，核对日期为 2026-08-25。本目录记录当前实现与设计取舍；运行契约以 `package.json`、`lib/index.js` 和 `lib/client.js` 为准。
+> 版本：对应 package.json `0.2.0`。当前支持 DSH `0.1.5-rc.2`（上游 SHA `fb2c4b9e698e30edb738bca4cf0618587db7d203`），核对日期为 2026-09-20。本目录记录当前实现与设计取舍；运行契约以 `package.json`、`lib/index.js` 和 `lib/client.js` 为准。
 
 本目录是设计文档的唯一入口，按主题拆分为以下文档：
 
@@ -18,5 +18,6 @@
 | [limitations.md](limitations.md) | 已知限制与后续方向 |
 | [structure.md](structure.md) | 项目目录结构 |
 | [upgrade-dsh-0.1.1-rc.2.md](upgrade-dsh-0.1.1-rc.2.md) | DSH `0.1.1-rc.2` 适配实施方案：依赖、凭据格式、安全文档、测试与真实装配验收 |
+| [upgrade-dsh-0.1.5-rc.2.md](upgrade-dsh-0.1.5-rc.2.md) | DSH `0.1.5-rc.2` 兼容修复实施记录，以及 `0.1.6` 多 Session API 的前瞻适配边界 |
 
 建议阅读顺序：`overview.md` → `packaging.md` → `host.md` → `client.md` → `i18n.md` → `decisions.md` → `security.md` → `verification.md` → `limitations.md`；配置与安全（`configuration-and-security.md`）可随时查阅。
