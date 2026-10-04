@@ -40,12 +40,12 @@ DSH 的 `clientModules` 服务（Node 半）扫描宿主 Loader 里声明了 `ds
 容易混淆，务必区分：
 
 - **`lib/index.js` 的 `export const inject`**：宿主端 Cordis 服务依赖，当前为 `credentials`、`connection`、`commands`；其中 `settings` 通过 `ctx.get('settings')` 可选读取，不作为硬注入，缺失时命令回退中性文案。
-- **package.json 的 `dsh.client.inject`**：客户端模块图边，值是 `0.1.5` 的显式服务提供方（session-controller、locale、ui-chat、commands、conversation、primitives、renderer、settings-general），用于启动图预检、展示与 HMR 差异判断；它不决定激活顺序，实际激活由下方 `exports.inject` 声明的 Cordis 服务依赖等待驱动。
+- **package.json 的 `dsh.client.inject`**：客户端模块图边，值是 `0.2.x` 的显式服务提供方（session-controller、locale、ui-chat、commands、conversation、primitives、renderer、settings-general），用于启动图预检、展示与 HMR 差异判断；它不决定激活顺序，实际激活由下方 `exports.inject` 声明的 Cordis 服务依赖等待驱动。
 - **`lib/client.js` 的 `exports.inject`**：cordis **服务**依赖，值 `["slots", "locale", "sessions"]`，决定浏览器端 cordis 上下文里可用哪些服务。
 
-### 4.4 DSH 0.1.5-rc.2 兼容声明
+### 4.4 DSH 0.2.x 兼容声明
 
-`package.json` 版本为 `0.2.0`，Node.js 基线与目标 DSH 一致：`^22.19.0 || >=24.0.0`。所有 `@deepseek-ai/dsh-*` peer 均声明为 `>=0.1.5-rc.2 <0.1.6`；`@deepseek-ai/schemastery` 为正式 Config schema 的直接依赖。
+`package.json` 版本为 `0.3.0`，Node.js 基线与目标 DSH 一致：`^22.19.0 || >=24.0.0`。所有 `@deepseek-ai/dsh-*` peer 均声明为 `>=0.2.0-rc.0 <0.3.0`；`@deepseek-ai/schemastery` 为正式 Config schema 的直接依赖。
 
 发布元数据固定指向本仓库：`repository.url` 为 `git+https://github.com/golitter/dsh-deepseek-billing.git`，`homepage` 指向 README，`bugs.url` 指向 GitHub Issues；`test/package.test.js` 会锁定这些值，避免 npm 页面脱离实际维护入口。
 

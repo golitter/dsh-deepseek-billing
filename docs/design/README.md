@@ -1,6 +1,6 @@
 # dsh-deepseek-billing 设计文档
 
-> 版本：对应 package.json `0.2.0`。当前支持 DSH `0.1.5-rc.2`（上游 SHA `fb2c4b9e698e30edb738bca4cf0618587db7d203`），核对日期为 2026-09-20。本目录记录当前实现与设计取舍；运行契约以 `package.json`、`lib/index.js` 和 `lib/client.js` 为准。
+> 版本：对应 package.json `0.3.0`。当前支持 DSH `0.2.0-rc.2`（peer 范围 `>=0.2.0-rc.0 <0.3.0`），核对日期为 2026-09-20。本目录记录当前实现与设计取舍；运行契约以 `package.json`、`lib/index.js` 和 `lib/client.js` 为准。
 
 本目录是设计文档的唯一入口，按主题拆分为以下文档：
 

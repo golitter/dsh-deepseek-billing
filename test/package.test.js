@@ -9,7 +9,7 @@ const packageJson = JSON.parse(await readFile(resolve(root, 'package.json'), 'ut
 const patch = await readFile(resolve(root, 'cordis.patch.yml'), 'utf8')
 const client = await readFile(resolve(root, 'lib/client.js'), 'utf8')
 
-const DSH_PEER_RANGE = '>=0.1.5-rc.2 <0.1.6'
+const DSH_PEER_RANGE = '>=0.2.0-rc.0 <0.3.0'
 const DSH_PEERS = [
   '@deepseek-ai/dsh-credentials',
   '@deepseek-ai/dsh-client-connection',
@@ -35,9 +35,9 @@ const CLIENT_INJECT = [
   '@deepseek-ai/dsh-client-ui-settings-general',
 ]
 
-test('declares the DSH 0.1.5 package contract without expanding the publish surface', () => {
+test('declares the DSH 0.2.x package contract without expanding the publish surface', () => {
   assert.equal(packageJson.name, 'dsh-deepseek-billing')
-  assert.equal(packageJson.version, '0.2.0')
+  assert.equal(packageJson.version, '0.3.0')
   assert.equal(packageJson.engines?.node, '^22.19.0 || >=24.0.0')
   assert.deepEqual(packageJson.repository, {
     type: 'git',

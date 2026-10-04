@@ -3,7 +3,7 @@ import test from 'node:test'
 
 import { apply } from '../lib/index.js'
 
-function createContext(credential = { value: 'fixture-credential' }, config = {}, localePreference = 'zh') {
+function createContext(credential = { value: 'fixture-credential' }, config = {}, localePreference = 'zh', settingsOverride) {
   let service
   let handler
   let route
@@ -12,13 +12,15 @@ function createContext(credential = { value: 'fixture-credential' }, config = {}
   let currentLocalePreference = localePreference
   const effects = []
 
-  const settings = currentLocalePreference === null
+  const settings = settingsOverride !== undefined ? settingsOverride : currentLocalePreference === null
     ? undefined
     : {
-        get(ns) {
-          assert.equal(ns, 'locale')
+        // DSH 0.2.0 SettingsForms shape: describe() returns one descriptor per
+        // profile entry ({ ns, value, ... }); updates emit
+        // 'settings/document-updated' (ns, revision).
+        describe() {
           if (typeof currentLocalePreference === 'function') return currentLocalePreference()
-          return { preference: currentLocalePreference }
+          return [{ ns: 'locale', value: { preference: currentLocalePreference } }]
         },
       }
 
@@ -61,7 +63,7 @@ function createContext(credential = { value: 'fixture-credential' }, config = {}
       },
     },
     on(name, listener) {
-      assert.equal(name, 'settings/updated')
+      assert.equal(name, 'settings/document-updated')
       settingsListener = listener
       return () => {
         if (settingsListener === listener) settingsListener = undefined
@@ -86,7 +88,7 @@ function createContext(credential = { value: 'fixture-credential' }, config = {}
     },
     updateLocalePreference(next) {
       currentLocalePreference = next
-      settingsListener?.('locale', { preference: next }, {}, 'update')
+      settingsListener?.('locale', 2)
     },
   }
 }
@@ -397,6 +399,25 @@ test('slash command falls back to neutral text without a locale', async () => {
       throw new Error('settings service failed')
     })
     assert.deepEqual(await failingSettings.handler({ rawInput: '' }), { kind: 'success', text: 'CNY 12.34' })
+
+    // Defensive SettingsForms branches from lib/index.js readCommandMessages:
+    // describe returning a non-array and a settings object without describe
+    // both fall back to the neutral locale.
+    const { command: nonArrayDescribe } = createContext(undefined, undefined, 'zh', {
+      describe: () => ({ ns: 'locale', value: { preference: 'zh' } }),
+    })
+    assert.equal(nonArrayDescribe.description, 'show the DeepSeek account balance')
+    assert.deepEqual(await nonArrayDescribe.handler({ rawInput: '' }), { kind: 'success', text: 'CNY 12.34' })
+
+    const { command: missingDescribe } = createContext(undefined, undefined, 'zh', {})
+    assert.equal(missingDescribe.description, 'show the DeepSeek account balance')
+    assert.deepEqual(await missingDescribe.handler({ rawInput: '' }), { kind: 'success', text: 'CNY 12.34' })
+
+    const { command: malformedEntries } = createContext(undefined, undefined, 'zh', {
+      describe: () => [null, {}, { ns: 'theme' }, { ns: 'locale' }],
+    })
+    assert.equal(malformedEntries.description, 'show the DeepSeek account balance')
+    assert.deepEqual(await malformedEntries.handler({ rawInput: '' }), { kind: 'success', text: 'CNY 12.34' })
   } finally {
     globalThis.fetch = originalFetch
   }

@@ -115,6 +115,6 @@ handler 复用 `deepseekBilling.getBalance()`；主标签、空态和固定错�
 
 命令不接受参数，handler 先把 `invocation.rawInput` 防御性归一为非字符串（缺失/`null`/数字按空串处理）再 `trim()`，非空时直接返回本地化用法错误，不发起余额请求。
 
-语言偏好是 Host-backed：`dsh-client-locale` 的宿主半把 `locale.preference` 注册进宿主 `settings` 服务并持久化到 `settings.yaml`。命令 handler 经 `ctx.get('settings')` 读 `settings.get('locale').preference`（`zh`/`en`）选择文案；`settings` 服务缺失、读取失败或 `preference` 未知时回退为无标签的 `CNY 12.34`、空态 `—`、稳定错误码或固定英文用法提示，语言读取本身不会阻断余额查询。
+语言偏好是 Host-backed：`dsh-client-locale` 的宿主半把 `locale.preference` 注册进宿主 `settings` 服务并持久化到 `settings.yaml`。命令 handler 经 `ctx.get('settings')` 调用 DSH `0.2.x` `SettingsForms` 服务的 `describe()`，在返回的描述符数组中查找 `ns === 'locale'` 的条目并读取 `value.preference`（`zh`/`en`）选择文案；`settings` 服务缺失、`describe()` 不存在、返回非数组、读取失败或 `preference` 未知时回退为无标签的 `CNY 12.34`、空态 `—`、稳定错误码或固定英文用法提示，语言读取本身不会阻断余额查询。
 
-命令的 `description` 就是截图中斜杠发现菜单的灰色摘要：zh 为“查看 DeepSeek 账户余额”，en 与无 Host 偏好时为 `show the DeepSeek account balance`。插件监听 `settings/updated` 的 `locale` 变化；摘要变化时注销并重新注册命令，`commands` 服务发出 `commands/change`，客户端目录随即重新拉取，因此持久化语言切换后无需重启。
+命令的 `description` 就是截图中斜杠发现菜单的灰色摘要：zh 为“查看 DeepSeek 账户余额”，en 与无 Host 偏好时为 `show the DeepSeek account balance`。插件监听 `settings/document-updated`（参数为 `ns, revision`）的 `locale` 变化；摘要变化时注销并重新注册命令，`commands` 服务发出 `commands/change`，客户端目录随即重新拉取，因此持久化语言切换后无需重启。
