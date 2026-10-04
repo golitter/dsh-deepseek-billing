@@ -19,5 +19,6 @@
 | [structure.md](structure.md) | 项目目录结构 |
 | [upgrade-dsh-0.1.1-rc.2.md](upgrade-dsh-0.1.1-rc.2.md) | DSH `0.1.1-rc.2` 适配实施方案：依赖、凭据格式、安全文档、测试与真实装配验收 |
 | [upgrade-dsh-0.1.5-rc.2.md](upgrade-dsh-0.1.5-rc.2.md) | DSH `0.1.5-rc.2` 兼容修复实施记录，以及 `0.1.6` 多 Session API 的前瞻适配边界 |
+| [upgrade-dsh-0.2.0-rc.2.md](upgrade-dsh-0.2.0-rc.2.md) | DSH `0.2.x` 适配实施记录：`SettingsForms` describe() 读取、`settings/document-updated` 事件与 peer 范围平移 |
 
 建议阅读顺序：`overview.md` → `packaging.md` → `host.md` → `client.md` → `i18n.md` → `decisions.md` → `security.md` → `verification.md` → `limitations.md`；配置与安全（`configuration-and-security.md`）可随时查阅。

@@ -32,9 +32,10 @@
 │       ├── limitations.md
 │       ├── structure.md
 │       ├── upgrade-dsh-0.1.1-rc.2.md # 历史 DSH 0.1.1-rc.2 适配记录
-│       └── upgrade-dsh-0.1.5-rc.2.md # DSH 0.1.5-rc.2 兼容修复与 0.1.6 前瞻
+│       ├── upgrade-dsh-0.1.5-rc.2.md # DSH 0.1.5-rc.2 兼容修复与 0.1.6 前瞻
+│       └── upgrade-dsh-0.2.0-rc.2.md # DSH 0.2.x SettingsForms 适配记录
 ├── test/
-│   ├── index.test.js   # 宿主端服务、错误码、路由、命令与配置测试（30 cases）
+│   ├── index.test.js   # 宿主端服务、错误码、路由、命令与配置测试（29 cases）
 │   ├── client.test.js  # 客户端模块、注入、国际化、命令行插槽与会话提示（3 cases）
 │   ├── client-render.test.js # 余额页状态、响应校验、刷新、超时、ARIA 与翻译行为（5 cases）
 │   └── package.test.js # 发布元数据、peer 与发布文件边界契约
